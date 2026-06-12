@@ -6,8 +6,8 @@
 
 ## Status
 
-- **Current phase:** Phase 0 — Foundations [IN PROGRESS]
-- **Sub-step:** writing scaffolding files (hygiene → Rust → Python → CI → docs)
+- **Current phase:** Phase 0 — Foundations [DONE] (commit history tells the story)
+- **Sub-step:** awaiting user go-ahead to begin Phase 1.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
@@ -24,104 +24,105 @@
 
 ## Standing assumptions (user may correct any time)
 
-- Repo lives at `/Users/tiz/Code/Repos/quantis`; user pushes to GitHub themselves
-  (CI workflows are written but first run happens on push).
-- Toolchain: stable Rust (2021 edition), Python 3.11+, maturin for bindings,
-  uv for Python env. macOS/Apple Silicon is the dev box; CI runs Linux.
-- License: **MIT** (narrowed from "MIT OR Apache-2.0" to cut boilerplate; trivial
-  to dual-license later if ever needed).
-- Engine config: TOML; research/feature configs: YAML (pydantic-validated). Both
-  fail closed: unknown fields are errors. → ADR-001.
-- ADR numbering is chronological by decision date: 000 process, 001 config split,
-  002 Rust/Python boundary (Phase 1), 003 regime models (Phase 2), 004 fill model
-  (Phase 3), 005 risk framework (Phase 3).
+- Repo lives at `/Users/tiz/Code/Repos/quantis`; user pushes to GitHub themselves.
+  CI workflows are committed; branch protection (block merge on red) is a GitHub
+  setting the user enables on push.
+- Toolchain verified locally: cargo 1.95 (edition 2024), uv 0.10, pyo3 0.26
+  (builds against system Python 3.14; project pins 3.11 floor), maturin >=1.7.
+- License: **MIT** (narrowed from "MIT OR Apache-2.0" to cut boilerplate).
+- Engine config: TOML; research configs: YAML; both fail closed → ADR-001.
+- ADR numbering is chronological: 000 process, 001 config split, 002 Rust/Python
+  boundary (Phase 1), 003 regime models (Phase 2), 004 fill model (Phase 3),
+  005 risk framework (Phase 3).
 - Regime model pair: hand-rolled Gaussian HMM (EM, tested against hmmlearn) vs.
   Bayesian Online Changepoint Detection (Adams–MacKay, Student-t predictive).
 - Prices/sizes are fixed-point i64 ticks in the Rust core (determinism, exact
   hashing of results artifacts); floats only at the research boundary.
 - No GPU dependency in the core; PyTorch is an optional research extra.
-- Hyperliquid testnet account/keys needed only at Phase 4; everything earlier
-  runs offline. Hyperliquid API specifics (WS message schemas, candle pagination
-  limits) are verified against live docs at Phase 1 start, not assumed.
+- Hyperliquid testnet keys needed only at Phase 4; everything earlier runs
+  offline. Hyperliquid API specifics (WS schemas, candle pagination limits) are
+  verified against live docs at Phase 1 start, not assumed from memory.
 
 ## Phase checklist
 
-### Phase 0 — Foundations [IN PROGRESS]
+### Phase 0 — Foundations [DONE]
 
-Hygiene:
-- [TODO] `.gitignore`, `.editorconfig`, `LICENSE` (MIT)
+- [DONE] `.gitignore`, `.editorconfig`, `LICENSE` (MIT)
+- [DONE] `Cargo.toml` — workspace (7 crates), shared deps, workspace lints
+  (missing_docs, clippy::all), release profile; `crates/python` excluded from
+  default-members (needs a Python toolchain)
+- [DONE] `crates/core` — `config.rs`: fail-closed TOML engine config;
+  `mode = "mainnet"` rejected with a pointed error, no bypass; 5 unit tests
+- [DONE] `config/engine.example.toml` — commented example, parsed by core tests
+- [DONE] `crates/{market-data,backtest,execution,risk}` — doc-only skeletons
+  stating scope and landing phase
+- [DONE] `crates/python` — PyO3 0.26 skeleton module `quantis_core`
+  (abi3-py311, maturin pyproject, extension-module feature-gated)
+- [DONE] `crates/cli` — `quantis config validate` works end to end;
+  record/replay/backtest/trade are loud phase-labelled stubs; 2 tests
+- [DONE] `python/` — package `quantis` (hatchling, py.typed, mypy strict,
+  ruff): pydantic research config schema + 5 subpackage skeletons; 6 tests
+- [DONE] `config/research.example.yaml` — commented example, parsed by tests
+- [DONE] `Makefile` — setup/fmt/fmt-check/lint/test/ci/demo
+- [DONE] `.github/workflows/ci.yml` — rust, python, smoke jobs
+- [DONE] `.pre-commit-config.yaml` — gitleaks, ruff, cargo fmt, hygiene hooks
+- [DONE] `README.md` (safety posture first), `CONTRIBUTING.md`,
+  `data/README.md`, `docs/adr/{README,template,ADR-000,ADR-001}.md`
 
-Rust:
-- [TODO] `Cargo.toml` — workspace: members, shared deps, lints, profiles;
-  `crates/python` excluded from default-members (needs local Python)
-- [TODO] `crates/core/{Cargo.toml,src/lib.rs,src/config.rs}` — validated TOML
-  engine config; `mode = "mainnet"` hard-rejected with a pointed error
-- [TODO] `config/engine.example.toml` — commented example, parsed by core tests
-- [TODO] `crates/{market-data,backtest,execution,risk}` — doc-only skeletons
-- [TODO] `crates/python/{Cargo.toml,src/lib.rs,pyproject.toml}` — PyO3 skeleton
-  module `quantis_core`, maturin-built, abi3-py311
-- [TODO] `crates/cli/{Cargo.toml,src/main.rs}` — `quantis config validate` works;
-  `record`/`replay`/`backtest`/`trade` are loud phase-labelled stubs
-
-Python:
-- [TODO] `python/pyproject.toml` (hatchling; ruff + mypy strict + pytest config),
-  `python/.python-version`, `python/quantis/py.typed`
-- [TODO] `python/quantis/{__init__.py,config.py}` — pydantic research config
-  schema (seed, features, model, cv w/ embargo), fail-closed
-- [TODO] `python/quantis/{data,features,models,evaluation,dashboard}/__init__.py`
-- [TODO] `python/tests/test_config.py`, `config/research.example.yaml`
-
-Tooling/CI:
-- [TODO] `Makefile` — setup / fmt / fmt-check / lint / test / ci / demo
-- [TODO] `.github/workflows/ci.yml` — rust (fmt, clippy -D warnings, test,
-  check bindings), python (ruff, mypy, pytest), smoke (config validate;
-  becomes the seeded deterministic backtest in Phase 1)
-- [TODO] `.pre-commit-config.yaml` — gitleaks, ruff, cargo fmt, hygiene hooks
-
-Docs:
-- [TODO] `README.md` (safety posture, status, quickstart), `CONTRIBUTING.md`,
-  `data/README.md` + `data/sample/.gitkeep`
-- [TODO] `docs/adr/{README.md,template.md}`, ADR-000 (record decisions),
-  ADR-001 (TOML engine config / YAML research config)
+Verified locally: `make ci` green (clippy -D warnings, mypy strict, 7 Rust
+tests, 6 Python tests), `make demo` validates the example config end to end,
+`cargo check -p quantis-python` compiles the bindings crate.
 
 ### Phase 1 — Rust data + book + backtest core [TODO]
-Event model, fixed-point types, WS ingestion w/ reconnect + gap detection,
-order book reconstruction, event recorder, backtest loop v0, results artifact
-(config hash + git SHA + metrics), Criterion benches + Python comparison bench,
-bundled sample data, ADR-002 (Rust/Python boundary, with numbers).
+
+Expand to exact file paths at phase start. Scope:
+- Verify Hyperliquid WS/REST API schemas against live docs (first sub-step).
+- `core`: event model (Trade, L2Update, BookSnapshot, Candle, order/fill
+  events), fixed-point i64 price/size types, exchange-vs-receive timestamps.
+- `market-data`: tokio WS client w/ reconnect + backoff + jitter, gap
+  detection → resnapshot, bounded channels w/ drop accounting, recorder.
+- Order book reconstruction; ladder structure picked by Criterion benchmark.
+- `backtest`: event-driven loop v0, strategy trait, top-of-book fills + fees,
+  seeded results artifact (config hash + git SHA + metrics JSON).
+- Benches: book-apply throughput, backtest p50/p95/p99 per event, equivalent
+  Python loop for comparison → ADR-002 with numbers.
+- Bundle `data/sample/` slice + provenance + hash; upgrade CI smoke job to
+  the seeded backtest with asserted artifact hash.
+- CLI: `record`, `replay`, `backtest` become real.
 
 ### Phase 2 — PyO3 bindings + research layer + regime models [TODO]
-maturin bindings, data loaders, YAML-driven feature pipeline, Gaussian HMM (own EM),
+maturin bindings (backtest runner, event-log readers), data loaders,
+YAML-driven feature pipeline, Gaussian HMM (own EM, validated vs. hmmlearn),
 BOCPD, walk-forward + purged k-fold w/ embargo + leakage canary tests,
-holdout wall (hash committed, untouched), ADR-003 (regime-model selection).
+holdout wall (hash committed, untouched), ADR-003.
 
 ### Phase 3 — Realistic fills + risk + statistical evaluation [TODO]
-Fill model v1 (maker/taker fees, queue approximation, latency injection, book-walk
-slippage, funding), risk crate (vol targeting, capped Kelly, stops, drawdown limits,
-kill switch, pre-trade veto API), DSR + SPA over logged trial history,
-docs/losing-money.md with quantified sensitivities, ADR-004 (fill model), ADR-005 (risk).
+Fill model v1 (maker/taker fees, queue approximation, latency injection,
+book-walk slippage, funding), risk crate (vol targeting, capped Kelly, stops,
+drawdown limits, kill switch, pre-trade veto API), DSR + SPA over logged trial
+history, docs/losing-money.md with quantified sensitivities, ADR-004, ADR-005.
 
 ### Phase 4 — Paper/testnet execution + observability + chaos [TODO]
-Order state machine w/ idempotent client IDs, paper gateway sharing backtest matching
-code, testnet gateway, reconciliation loop, tracing + Prometheus + Grafana JSON,
-documented chaos test (feed kill mid-order), backtest-vs-paper gap report.
+Order state machine w/ idempotent client IDs, paper gateway sharing backtest
+matching code, testnet gateway, reconciliation loop, tracing + Prometheus +
+Grafana JSON, documented chaos test (feed kill mid-order), backtest-vs-paper
+gap report.
 
 ### Phase 5 — Dashboard + docs + polish [TODO]
-Static HTML research dashboard (equity, regime overlay, rolling Sharpe/Sortino,
-drawdown, exposure, per-regime attribution), README final w/ <5-min one-command demo,
+Static HTML research dashboard, README final w/ <5-min one-command demo,
 architecture.md (C4), runbook.md, scaling.md, statistical-honesty doc, holdout
 evaluated exactly once, known-limitations section.
 
 ## Pending decisions
 
-- Order-book ladder data structure (BTreeMap vs. sorted-vec): decided by benchmark
-  in Phase 1, recorded in ADR-002 appendix.
-- SPA (Hansen) vs. White's Reality Check: pick in Phase 3 based on trial-log shape.
+- Order-book ladder data structure (BTreeMap vs. sorted-vec): decided by
+  benchmark in Phase 1, recorded in ADR-002 appendix.
+- SPA (Hansen) vs. White's Reality Check: pick in Phase 3 based on trial-log
+  shape.
 
 ## NEXT ACTION
 
-Continue Phase 0 in this order, verifying (`cargo fmt/clippy/test`, `uv run
-ruff/mypy/pytest`) before each conventional commit:
-hygiene files → Rust workspace + core config + CLI → Python package + research
-config → Makefile + CI → pre-commit → README/CONTRIBUTING/ADRs → final ledger
-update marking Phase 0 [DONE].
+On **"CONTINUE"**: begin Phase 1. First sub-step: verify Hyperliquid WS/REST
+API message schemas and candle endpoint limits against the live docs, then
+expand the Phase 1 checklist to exact file paths and start with the event
+model in `crates/core` (fixed-point types first, then events), test-first.
