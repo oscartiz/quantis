@@ -6,8 +6,8 @@
 
 ## Status
 
-- **Current phase:** Plan approved internally; Phase 0 not started.
-- **Sub-step:** Awaiting user go-ahead to begin Phase 0.
+- **Current phase:** Phase 0 — Foundations [IN PROGRESS]
+- **Sub-step:** writing scaffolding files (hygiene → Rust → Python → CI → docs)
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
@@ -28,8 +28,13 @@
   (CI workflows are written but first run happens on push).
 - Toolchain: stable Rust (2021 edition), Python 3.11+, maturin for bindings,
   uv for Python env. macOS/Apple Silicon is the dev box; CI runs Linux.
-- License: MIT OR Apache-2.0 (Rust-ecosystem convention).
-- Engine config: TOML; research/feature configs: YAML (pydantic-validated).
+- License: **MIT** (narrowed from "MIT OR Apache-2.0" to cut boilerplate; trivial
+  to dual-license later if ever needed).
+- Engine config: TOML; research/feature configs: YAML (pydantic-validated). Both
+  fail closed: unknown fields are errors. → ADR-001.
+- ADR numbering is chronological by decision date: 000 process, 001 config split,
+  002 Rust/Python boundary (Phase 1), 003 regime models (Phase 2), 004 fill model
+  (Phase 3), 005 risk framework (Phase 3).
 - Regime model pair: hand-rolled Gaussian HMM (EM, tested against hmmlearn) vs.
   Bayesian Online Changepoint Detection (Adams–MacKay, Student-t predictive).
 - Prices/sizes are fixed-point i64 ticks in the Rust core (determinism, exact
@@ -41,57 +46,82 @@
 
 ## Phase checklist
 
-File-level checklists are expanded at the start of each phase; later phases stay
-coarse until then.
+### Phase 0 — Foundations [IN PROGRESS]
 
-### Phase 0 — Foundations [TODO]
-- [TODO] Cargo workspace + crate skeletons (`core`, `market-data`, `backtest`, `execution`, `risk`, `python`, `cli`)
-- [TODO] Python package skeleton (`quantis/` with `data`, `features`, `models`, `evaluation`, `dashboard`)
-- [TODO] Config system: TOML engine config + YAML research config, both schema-validated
-- [TODO] CI: GitHub Actions (rust fmt/clippy/test, python ruff/mypy/pytest, seeded smoke backtest)
-- [TODO] Pre-commit hooks incl. secret scan (gitleaks)
-- [TODO] README skeleton, LICENSE, CONTRIBUTING.md, .gitignore, Makefile
-- [TODO] docs/adr/ scaffold + ADR-000 (record architecture decisions)
+Hygiene:
+- [TODO] `.gitignore`, `.editorconfig`, `LICENSE` (MIT)
+
+Rust:
+- [TODO] `Cargo.toml` — workspace: members, shared deps, lints, profiles;
+  `crates/python` excluded from default-members (needs local Python)
+- [TODO] `crates/core/{Cargo.toml,src/lib.rs,src/config.rs}` — validated TOML
+  engine config; `mode = "mainnet"` hard-rejected with a pointed error
+- [TODO] `config/engine.example.toml` — commented example, parsed by core tests
+- [TODO] `crates/{market-data,backtest,execution,risk}` — doc-only skeletons
+- [TODO] `crates/python/{Cargo.toml,src/lib.rs,pyproject.toml}` — PyO3 skeleton
+  module `quantis_core`, maturin-built, abi3-py311
+- [TODO] `crates/cli/{Cargo.toml,src/main.rs}` — `quantis config validate` works;
+  `record`/`replay`/`backtest`/`trade` are loud phase-labelled stubs
+
+Python:
+- [TODO] `python/pyproject.toml` (hatchling; ruff + mypy strict + pytest config),
+  `python/.python-version`, `python/quantis/py.typed`
+- [TODO] `python/quantis/{__init__.py,config.py}` — pydantic research config
+  schema (seed, features, model, cv w/ embargo), fail-closed
+- [TODO] `python/quantis/{data,features,models,evaluation,dashboard}/__init__.py`
+- [TODO] `python/tests/test_config.py`, `config/research.example.yaml`
+
+Tooling/CI:
+- [TODO] `Makefile` — setup / fmt / fmt-check / lint / test / ci / demo
+- [TODO] `.github/workflows/ci.yml` — rust (fmt, clippy -D warnings, test,
+  check bindings), python (ruff, mypy, pytest), smoke (config validate;
+  becomes the seeded deterministic backtest in Phase 1)
+- [TODO] `.pre-commit-config.yaml` — gitleaks, ruff, cargo fmt, hygiene hooks
+
+Docs:
+- [TODO] `README.md` (safety posture, status, quickstart), `CONTRIBUTING.md`,
+  `data/README.md` + `data/sample/.gitkeep`
+- [TODO] `docs/adr/{README.md,template.md}`, ADR-000 (record decisions),
+  ADR-001 (TOML engine config / YAML research config)
 
 ### Phase 1 — Rust data + book + backtest core [TODO]
-- Event model, fixed-point types, WS ingestion w/ reconnect + gap detection,
-  order book reconstruction, event recorder, backtest loop v0, results artifact
-  (config hash + git SHA + metrics), Criterion benches + Python comparison bench,
-  bundled sample data, ADR-001 (Rust/Python split, with numbers).
+Event model, fixed-point types, WS ingestion w/ reconnect + gap detection,
+order book reconstruction, event recorder, backtest loop v0, results artifact
+(config hash + git SHA + metrics), Criterion benches + Python comparison bench,
+bundled sample data, ADR-002 (Rust/Python boundary, with numbers).
 
 ### Phase 2 — PyO3 bindings + research layer + regime models [TODO]
-- maturin bindings, data loaders, YAML-driven feature pipeline, Gaussian HMM (own EM),
-  BOCPD, walk-forward + purged k-fold w/ embargo + leakage canary tests,
-  holdout wall (hash committed, untouched), ADR-002 (regime-model selection).
+maturin bindings, data loaders, YAML-driven feature pipeline, Gaussian HMM (own EM),
+BOCPD, walk-forward + purged k-fold w/ embargo + leakage canary tests,
+holdout wall (hash committed, untouched), ADR-003 (regime-model selection).
 
 ### Phase 3 — Realistic fills + risk + statistical evaluation [TODO]
-- Fill model v1 (maker/taker fees, queue approximation, latency injection, book-walk
-  slippage, funding), risk crate (vol targeting, capped Kelly, stops, drawdown limits,
-  kill switch, pre-trade veto API), DSR + SPA over logged trial history,
-  docs/losing-money.md with quantified sensitivities, ADR-003 (fill model), ADR-004 (risk).
+Fill model v1 (maker/taker fees, queue approximation, latency injection, book-walk
+slippage, funding), risk crate (vol targeting, capped Kelly, stops, drawdown limits,
+kill switch, pre-trade veto API), DSR + SPA over logged trial history,
+docs/losing-money.md with quantified sensitivities, ADR-004 (fill model), ADR-005 (risk).
 
 ### Phase 4 — Paper/testnet execution + observability + chaos [TODO]
-- Order state machine w/ idempotent client IDs, paper gateway sharing backtest matching
-  code, testnet gateway, reconciliation loop, tracing + Prometheus + Grafana JSON,
-  documented chaos test (feed kill mid-order), backtest-vs-paper gap report.
+Order state machine w/ idempotent client IDs, paper gateway sharing backtest matching
+code, testnet gateway, reconciliation loop, tracing + Prometheus + Grafana JSON,
+documented chaos test (feed kill mid-order), backtest-vs-paper gap report.
 
 ### Phase 5 — Dashboard + docs + polish [TODO]
-- Static HTML research dashboard (equity, regime overlay, rolling Sharpe/Sortino,
-  drawdown, exposure, per-regime attribution), README final w/ <5-min one-command demo,
-  architecture.md (C4), runbook.md, scaling.md, statistical-honesty doc, holdout
-  evaluated exactly once, known-limitations section.
+Static HTML research dashboard (equity, regime overlay, rolling Sharpe/Sortino,
+drawdown, exposure, per-regime attribution), README final w/ <5-min one-command demo,
+architecture.md (C4), runbook.md, scaling.md, statistical-honesty doc, holdout
+evaluated exactly once, known-limitations section.
 
 ## Pending decisions
 
 - Order-book ladder data structure (BTreeMap vs. sorted-vec): decided by benchmark
-  in Phase 1, recorded in ADR-001 appendix.
+  in Phase 1, recorded in ADR-002 appendix.
 - SPA (Hansen) vs. White's Reality Check: pick in Phase 3 based on trial-log shape.
 
 ## NEXT ACTION
 
-On **"CONTINUE"**: begin Phase 0. Expand the Phase 0 checklist to exact file paths,
-then write, in order: workspace `Cargo.toml` → crate skeletons → `pyproject.toml` +
-Python package skeleton → config schemas + example configs → Makefile →
-`.github/workflows/ci.yml` → pre-commit + gitleaks config → README/LICENSE/
-CONTRIBUTING/.gitignore → ADR-000 → update this ledger → commit (conventional commits,
-one per coherent unit).
+Continue Phase 0 in this order, verifying (`cargo fmt/clippy/test`, `uv run
+ruff/mypy/pytest`) before each conventional commit:
+hygiene files → Rust workspace + core config + CLI → Python package + research
+config → Makefile + CI → pre-commit → README/CONTRIBUTING/ADRs → final ledger
+update marking Phase 0 [DONE].

@@ -1,0 +1,25 @@
+# Rust
+/target/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+
+# Local configuration & secrets — real keys must never enter the repo
+.env
+.env.*
+config/engine.toml
+config/*.local.*
+
+# Data & run artifacts (captured market data and results are machine-local)
+data/capture/
+results/
+
+# OS / editor
+.DS_Store
