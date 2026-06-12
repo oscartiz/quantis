@@ -1,0 +1,29 @@
+# Quantis engine configuration (example).
+#
+# Copy to config/engine.toml (gitignored) and edit. Every field is required —
+# there are no silent defaults — and unknown keys are rejected, so typos fail
+# loudly. This file is parsed by the test suite (crates/core/src/config.rs) and
+# therefore cannot drift from the schema.
+
+[engine]
+# Where orders may go: "paper" (simulated fills, live data) or "testnet"
+# (Hyperliquid testnet). "mainnet" is rejected at validation BY DESIGN; there
+# is no flag to bypass this. See the safety posture in README.md.
+mode = "paper"
+# Master RNG seed. Every stochastic component derives its stream from this, so
+# two runs with the same config and data are bit-identical.
+seed = 42
+
+[instrument]
+venue = "hyperliquid"
+symbol = "BTC"
+
+[data]
+# Where the live recorder writes event logs (gitignored; machine-local).
+capture_dir = "data/capture"
+# Committed sample slice used by the offline demo and the CI smoke test.
+sample_dir = "data/sample"
+
+[logging]
+level = "info"    # trace | debug | info | warn | error
+format = "pretty" # pretty (development) | json (production collectors)

@@ -1,0 +1,18 @@
+[package]
+name = "quantis-cli"
+description = "Operational command-line interface for the Quantis engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "quantis"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+quantis-core.workspace = true
+
+[lints]
+workspace = true

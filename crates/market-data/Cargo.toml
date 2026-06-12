@@ -1,0 +1,11 @@
+[package]
+name = "quantis-market-data"
+description = "Hyperliquid WebSocket ingestion, order-book reconstruction, event recording"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

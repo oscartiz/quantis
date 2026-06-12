@@ -1,0 +1,11 @@
+[package]
+name = "quantis-execution"
+description = "Order state machine and paper/testnet gateways with reconciliation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

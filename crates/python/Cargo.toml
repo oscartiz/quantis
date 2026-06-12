@@ -1,0 +1,21 @@
+[package]
+name = "quantis-python"
+description = "PyO3 bindings exposing the Rust core to the Python research layer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "quantis_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3.workspace = true
+
+[features]
+# Enabled by maturin builds (see pyproject.toml in this directory); left off
+# for plain `cargo check` so the crate also compiles as a normal Rust library.
+extension-module = ["pyo3/extension-module"]
+
+[lints]
+workspace = true
