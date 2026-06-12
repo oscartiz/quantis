@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quantis"
+version = "0.1.0"
+description = "Research layer for the Quantis trading engine: features, regime models, honest evaluation"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7",
+  "PyYAML>=6.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.13",
+  "pytest>=8.0",
+  "ruff>=0.8",
+  "types-PyYAML>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["quantis"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM", "RET", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

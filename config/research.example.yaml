@@ -1,0 +1,33 @@
+# Quantis research run configuration (example).
+#
+# Every knob lives here — code contains no magic numbers. Unknown keys are
+# rejected by the schema (python/quantis/config.py), and this file is parsed
+# by the test suite, so it cannot drift from the schema.
+
+# Master seed; every stochastic component (model init, CV ordering) derives
+# its stream from it, making runs reproducible end to end.
+seed: 42
+
+instrument: BTC
+bar_interval: 1m
+
+# Feature pipeline, applied in order. Each feature is fully determined by its
+# name + params; changing a window means changing this file, not code.
+features:
+  - name: log_return
+    params: { lag: 1 }
+  - name: realized_vol
+    params: { window: 60 }
+
+# Regime model under study: gaussian_hmm | bocpd (both land in Phase 2).
+model:
+  name: gaussian_hmm
+  params:
+    n_states: 3
+
+# Time-series cross-validation. embargo_bars excludes a buffer after each test
+# fold so overlapping-horizon labels cannot leak into training data.
+cv:
+  scheme: walk_forward
+  n_splits: 5
+  embargo_bars: 60
