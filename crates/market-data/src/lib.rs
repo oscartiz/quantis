@@ -1,6 +1,12 @@
-//! Hyperliquid market-data ingestion (lands in Phase 1).
+//! Hyperliquid market-data ingestion.
 //!
-//! Will contain: a WebSocket client with reconnect/backoff and jitter,
-//! subscription management, sequence-gap detection with resnapshotting,
-//! order-book reconstruction, bounded channels with drop accounting, and the
-//! on-disk event recorder that feeds backtests.
+//! - [`ws`]: resilient WebSocket feed (reconnect/backoff, heartbeats,
+//!   staleness watchdog, bounded delivery with drop accounting).
+//! - [`hl`]: tolerant parsing of exchange messages into normalized events.
+//! - [`book`]: order-book maintenance with integrity counters.
+//! - [`recorder`]: length-prefixed on-disk event logs (truncation-detecting).
+
+pub mod book;
+pub mod hl;
+pub mod recorder;
+pub mod ws;
