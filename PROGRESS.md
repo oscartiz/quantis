@@ -6,9 +6,8 @@
 
 ## Status
 
-- **Current phase:** Phase 1 — Rust data + book + backtest core [IN PROGRESS]
-- **Sub-step:** verifying Hyperliquid API schemas, then core types → events →
-  book → recorder → WS client → sample capture → backtest → benches → ADR-002.
+- **Current phase:** Phase 1 — Rust data + book + backtest core [DONE]
+- **Sub-step:** awaiting user go-ahead to begin Phase 2 (PyO3 bindings + research).
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
@@ -74,22 +73,49 @@ Verified locally: `make ci` green (clippy -D warnings, mypy strict, 7 Rust
 tests, 6 Python tests), `make demo` validates the example config end to end,
 `cargo check -p quantis-python` compiles the bindings crate.
 
-### Phase 1 — Rust data + book + backtest core [TODO]
+### Phase 1 — Rust data + book + backtest core [DONE]
 
-Expand to exact file paths at phase start. Scope:
-- Verify Hyperliquid WS/REST API schemas against live docs (first sub-step).
-- `core`: event model (Trade, L2Update, BookSnapshot, Candle, order/fill
-  events), fixed-point i64 price/size types, exchange-vs-receive timestamps.
-- `market-data`: tokio WS client w/ reconnect + backoff + jitter, gap
-  detection → resnapshot, bounded channels w/ drop accounting, recorder.
-- Order book reconstruction; ladder structure picked by Criterion benchmark.
-- `backtest`: event-driven loop v0, strategy trait, top-of-book fills + fees,
-  seeded results artifact (config hash + git SHA + metrics JSON).
-- Benches: book-apply throughput, backtest p50/p95/p99 per event, equivalent
-  Python loop for comparison → ADR-002 with numbers.
-- Bundle `data/sample/` slice + provenance + hash; upgrade CI smoke job to
-  the seeded backtest with asserted artifact hash.
-- CLI: `record`, `replay`, `backtest` become real.
+- [DONE] Verified Hyperliquid WS schemas vs live docs (2026-06-11): l2Book is
+  a full-snapshot feed (no sequence numbers), trades carry B/A side codes,
+  heartbeat `{"method":"ping"}` vs 60s idle timeout, ms timestamps.
+- [DONE] `core::types` — i64 1e8 fixed-point Px/Qty/Cash (exact parse from
+  exchange decimal strings), TsNanos (exch ms widened, recv ns), Side; 14 tests.
+- [DONE] `core::events` — MarketEvent {Trade, L2Snapshot, Candle}; instrument
+  lives in the log header, not per-event.
+- [DONE] `core::hash`, `core::stats` — SHA-256 helpers, nearest-rank percentiles.
+- [DONE] `market-data::ws` — tokio WS, reconnect w/ capped jittered backoff,
+  30s ping, 75s staleness watchdog, bounded channel w/ drop accounting.
+  (No sequence-gap detection: snapshot feed has no sequence numbers — handled
+  honestly via staleness + full resnapshot on reconnect.)
+- [DONE] `market-data::hl` — tolerant parsing (unknown fields ignored, the
+  deliberate inverse of fail-closed config); 6 tests.
+- [DONE] `market-data::book` — Vec ladder (production) + BTreeBook (bench
+  subject); repairs+counts crossed/unsorted/bad-qty/ts-regression; 5 tests.
+- [DONE] `market-data::recorder` — length-prefixed bincode logs, truncation
+  detected not absorbed; 3 tests.
+- [DONE] `backtest::fill` — matching engine v0 (market orders walk visible
+  ladder, ppm fees, unfilled reported); single source of truth. Limits stated
+  in-module: no latency/queue/funding until Phase 3.
+- [DONE] `backtest::strategy` — Strategy trait + SmaCross plumbing demo
+  (integer cross-multiply, bit-reproducible); 4 tests.
+- [DONE] `backtest::engine` — event loop, deterministic accounting separated
+  from measured timing; determinism contract test; 2 tests.
+- [DONE] `backtest::report` — split artifact (hashed deterministic section +
+  unhashed runtime provenance); stable-hash test.
+- [DONE] `backtest::synthetic` — seeded streams for tests/benches only (never
+  used for performance claims).
+- [DONE] Benches: `book.rs` (Vec vs BTree), `engine.rs` (full loop),
+  `benchmarks/book_bench.py` (pure-CPython comparison). ADR-002 written.
+- [DONE] CLI: `record`, `replay`, `backtest --expect-hash` all real.
+- [DONE] Bundled real 15-min BTC capture (`data/sample/btc-sample.qnts`,
+  3077 events, clean integrity) + `PROVENANCE.md`; golden hash in
+  `tests/smoke/expected_hash.txt`; CI smoke job + cargo integration test both
+  assert it; `.gitattributes` pins bytes for cross-platform reproducibility.
+
+**Measured (Apple Silicon, release):** book snapshot-apply 34.5ns (Vec) vs
+458ns (BTree); full backtest loop 71ns/event = 14M events/s; pure-CPython
+equivalent ≳2.4µs/event → ~34× (ADR-002). Demo strategy on sample: −2.82 net
+over 15 min (2.01 fees) — honest small loss for a labeled non-alpha demo.
 
 ### Phase 2 — PyO3 bindings + research layer + regime models [TODO]
 maturin bindings (backtest runner, event-log readers), data loaders,
@@ -116,14 +142,27 @@ evaluated exactly once, known-limitations section.
 
 ## Pending decisions
 
-- Order-book ladder data structure (BTreeMap vs. sorted-vec): decided by
-  benchmark in Phase 1, recorded in ADR-002 appendix.
+- ~~Order-book ladder (BTreeMap vs sorted-vec)~~ — RESOLVED: Vec, ADR-002 appendix.
 - SPA (Hansen) vs. White's Reality Check: pick in Phase 3 based on trial-log
   shape.
+- Phase 2: confirm hmmlearn is acceptable as a *test oracle* dev-dependency
+  (the shipped HMM is hand-rolled; hmmlearn only validates it).
+
+## Toolchain notes (verified this phase)
+
+- pyo3 0.26, tokio-tungstenite 0.29 (rustls + **ring** provider — must call
+  `CryptoProvider::install_default()`; done in `ws::run_feed`).
+- bincode 1.x (classic serde API), rand 0.9, criterion 0.8.
+- Shell CWD can drift to `python/` between turns — always `cd` to repo root
+  before git ops.
 
 ## NEXT ACTION
 
-On **"CONTINUE"**: begin Phase 1. First sub-step: verify Hyperliquid WS/REST
-API message schemas and candle endpoint limits against the live docs, then
-expand the Phase 1 checklist to exact file paths and start with the event
-model in `crates/core` (fixed-point types first, then events), test-first.
+On **"CONTINUE"**: begin Phase 2. First sub-step: scaffold maturin build of
+`crates/python` into the `quantis` package env, expose a `run_backtest(config_path)`
+binding returning the artifact dict + an event-log reader yielding arrays, with
+a cross-language test asserting the Python-driven backtest reproduces the same
+determinism hash as the CLI. Then the YAML feature pipeline, then the Gaussian
+HMM (own EM, validated vs hmmlearn), then BOCPD, then purged walk-forward CV
+with embargo + leakage canary, then raise the holdout wall (commit its hash,
+do not touch). ADR-003 records the regime-model selection.
