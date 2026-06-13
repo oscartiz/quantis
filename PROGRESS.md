@@ -6,8 +6,27 @@
 
 ## Status
 
-- **Current phase:** Phase 3 — realistic fills + risk + statistical evaluation [DONE]
-- **Sub-step:** awaiting go-ahead for Phase 4 (paper/testnet execution + observability + chaos).
+- **Current phase:** Phase 4 — paper/testnet execution + observability + chaos [DONE]
+- **Sub-step:** awaiting go-ahead for Phase 5 (dashboard, docs polish, one-shot holdout).
+
+### Phase 4 — all [DONE]
+- [DONE] `execution::order`/`manager`: idempotent order state machine (fills
+  dedupe by fill id, cloids dedupe resubmits, validated transitions), position
+  + realized PnL with integer VWAP.
+- [DONE] `execution::paper`: PaperGateway reuses `quantis_backtest::FillEngine`
+  + `quantis_risk::RiskGate`. Measured: paper equity change == backtest net PnL
+  to the cent on the sample (docs/backtest-paper-gap.md).
+- [DONE] `execution::testnet`: HL order action built + tested to documented
+  format; `ActionSigner` seam, submission gated without a signer. ADR-006.
+- [DONE] `execution::reconcile`: position drift detection (exchange authoritative).
+- [DONE] `execution::metrics`: Prometheus text rendering; CLI serves /metrics
+  via a dependency-free HTTP responder. docs/grafana-dashboard.json committed.
+- [DONE] Chaos test (`tests/chaos.rs`): feed-kill + replay → no phantom position;
+  genuine miss → drift caught.
+- [DONE] `quantis trade` (replay + live) wired; docs/runbook.md.
+
+**Verified end of Phase 4:** 84 Rust tests, 52 Python tests, fmt/clippy/mypy
+clean, golden-hash smoke + chaos drill pass.
 
 ### Phase 3 — all [DONE]
 - [DONE] Fill model v1: execution latency (orders fill at the first snapshot
@@ -55,27 +74,31 @@ Build extension before pytest: `make bindings` (CI does this in the python job).
 clean, mypy strict clean, golden-hash smoke passes. Cross-language determinism
 holds (Python-driven backtest == CLI hash).
 
-## NEXT ACTION (Phase 4)
+## NEXT ACTION (Phase 5)
 
-On **"CONTINUE"**: begin Phase 4 — paper/testnet execution + observability +
-chaos. Build order:
-1. `execution` crate: order state machine with idempotent client order IDs
-   (submit→ack→filled/cancelled/rejected), position tracking. Unit-tested.
-2. Paper gateway: drives live WS data through the SAME `quantis_backtest` fill
-   engine + the `RiskGate`, so paper and backtest share fill + risk logic.
-3. Testnet gateway: Hyperliquid testnet order placement/cancel/reconcile (gated;
-   needs testnet keys via env — verify HL exchange-endpoint signing scheme first).
-4. Reconciliation loop: periodic compare of internal position vs exchange state;
-   surface drift. Idempotent order handling so retries never double-fill.
-5. Observability: `tracing` structured logs + a Prometheus `/metrics` endpoint
-   + committed Grafana dashboard JSON.
-6. Documented chaos test: kill the feed mid-order, show recovery and no phantom
-   positions. `docs/runbook.md` (start/monitor/kill/recover).
-7. Backtest-vs-paper gap report with attributed causes.
+On **"CONTINUE"**: begin Phase 5 — dashboard, docs polish, the one holdout shot.
+Build order:
+1. Python research dashboard: a single script that loads the sample (via the
+   `quantis_core` bindings), runs the feature pipeline + a regime model, and
+   renders a **static, self-contained HTML** report — equity curve, regime
+   overlay on price, rolling Sharpe/Sortino, drawdown, exposure, per-regime
+   trade attribution. No JS server; matplotlib→inline-PNG or a templated HTML.
+2. `make demo` upgrade: one command that runs the seeded backtest AND renders
+   the dashboard, offline, in <5 min (the README promise).
+3. `docs/architecture.md`: C4-style component + data/event-flow diagram.
+4. `docs/scaling.md`: one strategy/venue → many (multi-asset event model is
+   already there; describe the path, incl. tick/L3 data for the latency ceiling).
+5. The statistical-honesty doc (consolidate leakage/CV/DSR/SPA/holdout into one
+   reviewer-facing narrative).
+6. **The holdout, evaluated exactly once.** Seal a holdout on real captured
+   data (commit the manifest), then run `reveal_holdout` a single time and
+   report whatever it says — a mediocre honest number is the feature.
+7. README final pass + "Known limitations & future work".
 
-Open item for Phase 4 start: verify Hyperliquid's **exchange** (order) endpoint
-signing scheme and testnet base URL against live docs (only the market-data WS
-was verified in Phase 1).
+Note: Phase 5 dashboard needs a slightly larger/real dataset than the 15-min
+sample to be visually meaningful; capture one with `quantis record` at phase
+start, or generate a longer synthetic-but-clearly-labelled series for the
+plumbing and use the real capture for the holdout.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
