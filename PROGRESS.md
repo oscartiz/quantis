@@ -6,11 +6,10 @@
 
 ## Status
 
-- **Current phase:** Phase 2 — PyO3 bindings + research layer + regime models [IN PROGRESS]
-- **Sub-step:** Slice A (bindings + cross-language hash test) [DONE]; building
-  Slice B (config-driven feature pipeline + leakage canary).
+- **Current phase:** Phase 2 — PyO3 bindings + research layer + regime models [DONE]
+- **Sub-step:** awaiting go-ahead for Phase 3 (realistic fills + risk + DSR/SPA).
 
-### Phase 2 slice plan
+### Phase 2 slice plan — all [DONE]
 - [DONE] A — maturin PyO3 bindings; `quantis_backtest::runner` shared by CLI +
   binding; Python-driven backtest reproduces the golden hash (3 cross-lang tests).
   `read_mid_series` exposes event logs to research (floats at the boundary only).
@@ -21,13 +20,37 @@
   diagonal covariance, regime_order() resolves label-switching. Validated vs
   hmmlearn from a SHARED init (the only fair test for a non-convex objective):
   means agree to 2e-4 (6 tests). `init=` param enables warm-start/oracle compare.
-- [TODO] D — BOCPD (Adams–MacKay, Student-t predictive, constant hazard).
-  Online/causal counterpart to the HMM; the contrast is the ADR-003 thesis.
-- [TODO] E — purged walk-forward + purged k-fold CV with embargo; leakage test.
-- [TODO] F — holdout wall (commit hash, do not touch) + ADR-003.
+- [DONE] D — BOCPD (Adams–MacKay, NIG prior, Student-t predictive). Online/causal
+  counterpart to the HMM; changepoints from run-length resets; causality asserted
+  via prefix re-runs (7 tests).
+- [DONE] E — walk-forward + purged k-fold CV with embargo; `assert_no_leakage`
+  guard catches a naive unpurged k-fold (CV-level leakage canary; 7 tests).
+- [DONE] F — holdout wall: build_manifest (seal), load_research (refuse holdout),
+  reveal_holdout (gated + hash-verified). ADR-003 written (HMM + BOCPD selection).
 
-Python deps so far: runtime numpy/pydantic/PyYAML; dev maturin/hmmlearn(+scipy,
-sklearn)/mypy/ruff/pytest. mypy overrides: quantis_core, scipy.special, hmmlearn.*.
+Python deps: runtime numpy/pydantic/PyYAML; dev maturin/hmmlearn(+scipy,sklearn)/
+mypy/ruff/pytest. mypy overrides: quantis_core, scipy.special, hmmlearn.*.
+Build extension before pytest: `make bindings` (CI does this in the python job).
+
+**Verified end of Phase 2:** 46 Rust tests, 43 Python tests, clippy -D warnings
+clean, mypy strict clean, golden-hash smoke passes. Cross-language determinism
+holds (Python-driven backtest == CLI hash).
+
+## NEXT ACTION (Phase 3)
+
+On **"CONTINUE"**: begin Phase 3. Build order:
+1. Rust `backtest::fill` v1 → realistic fills: maker/taker already in; add latency
+   injection (submit delay shifts the book the order sees), conservative queue
+   model for resting limit orders, funding accrual. New ADR-004 (fill model).
+   Bump the golden hash deliberately (results change) with explanation.
+2. Rust `risk` crate: vol-targeting + capped fractional Kelly sizing, per-trade
+   stops, portfolio drawdown limit, kill switch, pre-trade veto API (property
+   tests). ADR-005 (risk framework).
+3. Python `evaluation`: Deflated Sharpe Ratio + SPA/Reality-Check over a logged
+   trial history (every research run appends a trial record). Pick SPA vs White's
+   based on trial-log shape.
+4. `docs/losing-money.md` with quantified sensitivities (fees×2, slippage×2,
+   regime-lag sweeps, capacity estimate).
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
