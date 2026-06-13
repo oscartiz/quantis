@@ -34,8 +34,8 @@ cannot disagree about fill logic.
 | Phase | Scope | State |
 |-------|-------|-------|
 | 0 | Scaffolding, fail-closed config system, CI, secret scanning | ✅ done |
-| 1 | WS ingestion, order book, backtest core, benchmarks, sample data | ⬜ next |
-| 2 | PyO3 bindings, feature pipeline, Gaussian HMM vs. BOCPD, purged CV | ⬜ |
+| 1 | WS ingestion, order book, backtest core, benchmarks, sample data | ✅ done |
+| 2 | PyO3 bindings, feature pipeline, Gaussian HMM vs. BOCPD, purged CV | ⬜ next |
 | 3 | Realistic fills (fees, latency, funding), risk layer, DSR/SPA | ⬜ |
 | 4 | Paper/testnet execution, Prometheus + Grafana, chaos test | ⬜ |
 | 5 | Research dashboard, docs, one-shot holdout evaluation | ⬜ |
@@ -47,11 +47,18 @@ Prerequisites: a stable Rust toolchain (`rustup`) and [`uv`](https://docs.astral
 ```sh
 make setup   # Python env + pre-commit hooks
 make ci      # everything CI runs: fmt, clippy -D warnings, mypy strict, all tests
-make demo    # Phase 0: validates the example engine config end to end
+make demo    # seeded backtest on the bundled real BTC sample, offline
+make smoke   # the same backtest, asserting the committed determinism hash
+make bench   # Criterion benchmarks (book ladders, backtest loop)
 ```
 
-By Phase 5, `make demo` runs a fully seeded backtest on bundled sample data
-and renders the research dashboard, offline, in under five minutes.
+`make demo` replays a real 15-minute Hyperliquid BTC capture
+(`data/sample/`, recorded by this repo's own ingestion code) through the
+backtest engine and writes a hashed results artifact — offline, no account
+needed. The demo strategy is an SMA crossover that exists to exercise the
+engine, not to make money; on the sample it loses ~$2.82 over 15 minutes,
+mostly to fees, and the README says so on purpose. By Phase 5 the same demo
+also renders the research dashboard, in under five minutes.
 
 ## Layout
 
