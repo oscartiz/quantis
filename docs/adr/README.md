@@ -7,7 +7,7 @@ their status changes to `superseded by ADR-NNN`.
 |-----|-------|--------|
 | [000](ADR-000-record-architecture-decisions.md) | Record architecture decisions | accepted |
 | [001](ADR-001-toml-engine-yaml-research.md) | TOML for the engine, YAML for research | accepted |
-| 002 | Rust/Python boundary (justified with Criterion numbers) | planned — Phase 1 |
-| 003 | Regime model selection (Gaussian HMM vs. BOCPD) | planned — Phase 2 |
+| [002](ADR-002-rust-python-boundary.md) | Rust/Python boundary (justified with Criterion numbers) | accepted |
+| [003](ADR-003-regime-model-selection.md) | Regime model selection (Gaussian HMM and BOCPD) | accepted |
 | 004 | Backtester fill model | planned — Phase 3 |
 | 005 | Risk framework | planned — Phase 3 |
