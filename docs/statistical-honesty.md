@@ -109,6 +109,34 @@ worth reporting truthfully, not an alpha to advertise. The credibility is in the
 *discipline that produced the number* (sealed, hashed, evaluated once), not in
 the number being large.
 
+### The distribution behind the holdout (walk-forward)
+
+A single out-of-sample window — even a sealed one — is one draw. To turn N = 1
+into a distribution, the walk-forward harness refits the model on all data up to
+each point and evaluates the next ~quarter, walling off only model *fitting* to
+the past (`quantis.evaluation.walk_forward`,
+`scripts/walk_forward_eval.py`). Across **20 quarterly out-of-sample windows**:
+
+| measure | value |
+|---|---|
+| per-window strategy Sharpe | mean +0.56, **median 0.00**, std 1.12 |
+| windows with positive return | **40%** |
+| windows beating buy-and-hold Sharpe | 60% |
+| mean time in market | 24% |
+| pooled OOS (all windows concatenated) | strategy Sharpe **+0.60** vs hold +0.20; return +123% vs +58% |
+
+This is the complete picture, and it is more sobering than the single holdout.
+The *pooled* out-of-sample result is genuinely decent — trading the strategy
+across every window in turn beats buy-and-hold on both Sharpe (0.60 vs 0.20) and
+total return (+123% vs +58%) over 2024–2026. But the *per-window distribution*
+shows why that is not the whole story: the **median window Sharpe is zero** and
+**only 40% of windows are positive**. The strategy earns its pooled result
+*episodically* — in a few favourable (mostly risk-off) windows — and does
+nothing in most. The sealed +19.9% holdout was one of the good windows, exactly
+as "N = 1 in the strategy's favourable environment" warned. A practitioner
+should read this as: *real but lumpy and regime-dependent edge, not a steady
+one* — and size and expectations accordingly.
+
 ## 6. Transaction-cost and capacity reality
 
 A number is also dishonest if it ignores what trading costs. `docs/losing-money.md`

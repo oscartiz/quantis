@@ -20,6 +20,11 @@ from quantis.evaluation.metrics import (
 )
 from quantis.evaluation.multiple_testing import SpaResult, spa_test
 from quantis.evaluation.trial_log import TrialLog, TrialRecord
+from quantis.evaluation.walk_forward import (
+    WalkForwardResult,
+    WindowResult,
+    walk_forward_evaluate,
+)
 
 __all__ = [
     "LeakageError",
@@ -27,6 +32,8 @@ __all__ = [
     "Split",
     "TrialLog",
     "TrialRecord",
+    "WalkForwardResult",
+    "WindowResult",
     "assert_no_leakage",
     "deflated_sharpe_ratio",
     "expected_max_sharpe",
@@ -38,4 +45,5 @@ __all__ = [
     "spa_test",
     "splits_from_config",
     "walk_forward",
+    "walk_forward_evaluate",
 ]

@@ -31,11 +31,15 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from numpy.typing import NDArray
 
-from quantis.config import FeatureSpec
 from quantis.data.candles import Candles, load_candles
 from quantis.evaluation.metrics import max_drawdown, sharpe_ratio, sortino_ratio
-from quantis.features import build_features
-from quantis.models.hmm import GaussianHMM
+from quantis.evaluation.regime_strategy import (
+    DEFAULT_COST_BPS,
+    causal_regime_returns,
+    fit_regime_hmm,
+    ordered_regimes,
+    regime_features,
+)
 
 Array = NDArray[np.float64]
 
@@ -58,61 +62,30 @@ class StrategyResult:
     cost_bps: float
 
 
-def _ordered_regimes(model: GaussianHMM, proba: Array) -> NDArray[np.int64]:
-    """MAP regime per row, relabelled to 0=bear,1=chop,2=bull via mean order."""
-    order = model.regime_order()  # state indices sorted by mean return ascending
-    rank = {int(s): r for r, s in enumerate(order)}
-    raw = np.argmax(proba, axis=1)
-    return np.array([rank[int(s)] for s in raw], dtype=np.int64)
+def run_strategy(
+    candles: Candles, *, seed: int = 42, cost_bps: float = DEFAULT_COST_BPS
+) -> StrategyResult:
+    """Fit the HMM (in-sample) and run the causal filtered-regime strategy, plus
+    the smoothed regimes for the (non-causal) analysis overlay."""
+    model = fit_regime_hmm(candles.close, seed=seed)
+    r = causal_regime_returns(model, candles.close, cost_bps=cost_bps)
 
-
-def run_strategy(candles: Candles, *, seed: int = 42, cost_bps: float = 5.0) -> StrategyResult:
-    """Fit the HMM and run the causal filtered-regime strategy.
-
-    Strategy: hold long while the *filtered* regime is bull, flat otherwise. The
-    position decided after observing day ``t`` is held over day ``t+1`` (no
-    look-ahead). A round-trip cost of ``cost_bps`` is charged on each change.
-    """
-    features = build_features(
-        candles.close,
-        [
-            FeatureSpec(name="log_return", params={"lag": 1}),
-            FeatureSpec(name="realized_vol", params={"window": 20}),
-        ],
-    )
-    valid = np.flatnonzero(features.valid)
-    x = features.values[valid]
-
-    model = GaussianHMM(n_states=3, seed=seed, n_iter=200, tol=1e-5).fit(x)
-    smoothed = _ordered_regimes(model, model.predict_proba(x))
-    filtered = _ordered_regimes(model, model.filter_proba(x))
-
-    # Position from the causal signal: long in bull (rank 2), else flat.
-    target = (filtered == 2).astype(np.float64)
-
-    # Align to realized next-period returns. Row j corresponds to candle index
-    # valid[j]; the position decided there is held over the return into
-    # valid[j]+1, so the final valid row (no next candle) is dropped.
-    n = len(valid) - 1 if valid[-1] + 1 >= len(candles) else len(valid)
-    idx = valid[:n]
-    next_ret = np.log(candles.close[idx + 1] / candles.close[idx])
-
-    position = target[:n]
-    asset_returns = next_ret
-    # cost when the position changes between consecutive periods
-    prev = np.concatenate([[0.0], position[:-1]])
-    cost = np.abs(position - prev) * (cost_bps / 10_000.0)
-    strat_returns = position * asset_returns - cost
+    # Smoothed regimes for the overlay, aligned to the same rows as the returns.
+    fm = regime_features(candles.close)
+    valid = np.flatnonzero(fm.valid)
+    smoothed = ordered_regimes(model, model.predict_proba(fm.values[valid]))
+    filtered = ordered_regimes(model, model.filter_proba(fm.values[valid]))
+    n = r.strat.shape[0]
     all_dates = candles.dates_iso()
 
     return StrategyResult(
-        dates=[all_dates[i] for i in idx],
-        price=candles.close[idx],
+        dates=[all_dates[i] for i in r.candle_index],
+        price=candles.close[r.candle_index],
         smoothed_regime=smoothed[:n],
         filtered_regime=filtered[:n],
-        position=position,
-        strat_returns=strat_returns,
-        asset_returns=asset_returns,
+        position=r.position,
+        strat_returns=r.strat,
+        asset_returns=r.hold,
         cost_bps=cost_bps,
     )
 

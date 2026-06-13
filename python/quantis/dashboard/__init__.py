@@ -6,4 +6,3 @@ per-regime trade attribution. The tradeable equity curve uses the causal
 from quantis.dashboard.report import StrategyResult, generate_report, run_strategy
 
 __all__ = ["StrategyResult", "generate_report", "run_strategy"]
-
