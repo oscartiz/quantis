@@ -89,23 +89,29 @@ Build extension before pytest: `make bindings` (CI does this in the python job).
 clean, mypy strict clean, golden-hash smoke passes. Cross-language determinism
 holds (Python-driven backtest == CLI hash).
 
+## Post-build follow-ups
+
+**The phased build (0–5) is complete.** Follow-ups beyond the brief:
+
+- [DONE] Walk-forward refit across many windows → OOS distribution
+  (`quantis.evaluation.walk_forward`, `scripts/walk_forward_eval.py`). Result:
+  pooled OOS Sharpe 0.60 vs hold 0.20, but median window Sharpe 0.00 / 40%
+  positive — episodic edge. Strengthened statistical-honesty.md §5.
+- [TODO] A maker strategy to exercise the conservative queue model end to end
+  (the next self-contained, fully-offline item; wires the maker path specified
+  in ADR-004).
+- [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
+- [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
+- [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
+  gap (needs testnet keys; ADR-006).
+
 ## NEXT ACTION
 
-**The phased build (0–5) is complete.** No phase remains. Optional follow-ups,
-in rough priority order (none required for the project to stand on its own):
-
-1. Walk-forward refit across many windows to turn the N=1 holdout into a
-   distribution (the honest next rigorous step).
-2. Deep-L2/L3 backfill to lift the latency/queue resolution ceiling (ADR-004).
-3. A maker strategy to exercise the conservative queue model end to end.
-4. Multi-asset: portfolio risk aggregate + cross-asset regime research.
-5. Wire the testnet `ActionSigner` with a real key and measure the paper↔testnet
-   gap (ADR-006).
-
-On **"CONTINUE"** with no new instruction: pick item (1) — extend
-`evaluate_holdout.py` to a walk-forward harness reporting the out-of-sample
-Sharpe distribution, since it most directly strengthens the central honesty
-claim.
+On **"CONTINUE"** with no new instruction: implement a **maker (limit-order)
+strategy** and wire the conservative back-of-queue fill model (ADR-004) into the
+backtest engine + paper gateway, with tests, so the maker path is exercised end
+to end rather than only specified. This is the highest-value fully-offline item
+left. Otherwise: name a follow-up above or a new direction.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
