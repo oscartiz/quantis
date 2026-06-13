@@ -1,13 +1,16 @@
 //! `quantis` — the operational command-line entry point.
 //!
-//! Phase 0 ships `config validate`; `record`, `replay`, and `backtest` land
-//! in Phase 1, `trade` (paper/testnet only) in Phase 4.
+//! Phase 1 ships `config validate`, `record`, and `replay`; `backtest` lands
+//! with the engine crate, `trade` (paper/testnet only) in Phase 4.
+
+mod record;
+mod replay;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use quantis_core::config::EngineConfig;
+use quantis_core::config::{EngineConfig, LogFormat, LogLevel, LoggingSection};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -27,11 +30,25 @@ enum Command {
         #[command(subcommand)]
         action: ConfigAction,
     },
-    /// Record live Hyperliquid market data to an event log (Phase 1).
-    Record,
-    /// Replay a recorded event log through the engine (Phase 1).
-    Replay,
-    /// Run a backtest defined by a config file (Phase 1).
+    /// Record live Hyperliquid market data to an event log.
+    Record {
+        /// Path to the TOML engine config.
+        #[arg(long, short)]
+        config: PathBuf,
+        /// How long to record, in seconds.
+        #[arg(long)]
+        duration_secs: u64,
+        /// Output file (default: capture_dir/<symbol>-<unix_ms>.qnts).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Replay a recorded event log: integrity report and throughput.
+    Replay {
+        /// Path to a .qnts event log.
+        #[arg(long, short)]
+        file: PathBuf,
+    },
+    /// Run a backtest defined by a config file (Phase 1, with the engine crate).
     Backtest,
     /// Run the paper/testnet trading engine (Phase 4).
     Trade,
@@ -72,10 +89,31 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             );
             Ok(())
         }
-        Command::Record => not_yet("record", 1),
-        Command::Replay => not_yet("replay", 1),
+        Command::Record {
+            config,
+            duration_secs,
+            out,
+        } => record::run(&config, duration_secs, out),
+        Command::Replay { file } => replay::run(&file),
         Command::Backtest => not_yet("backtest", 1),
         Command::Trade => not_yet("trade", 4),
+    }
+}
+
+/// Initialize structured logging from config. Idempotent enough for a CLI:
+/// called once per process by commands that emit logs.
+fn init_logging(logging: &LoggingSection) {
+    let level = match logging.level {
+        LogLevel::Trace => tracing::Level::TRACE,
+        LogLevel::Debug => tracing::Level::DEBUG,
+        LogLevel::Info => tracing::Level::INFO,
+        LogLevel::Warn => tracing::Level::WARN,
+        LogLevel::Error => tracing::Level::ERROR,
+    };
+    let builder = tracing_subscriber::fmt().with_max_level(level);
+    match logging.format {
+        LogFormat::Pretty => builder.init(),
+        LogFormat::Json => builder.json().init(),
     }
 }
 

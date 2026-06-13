@@ -8,4 +8,5 @@
 pub mod config;
 pub mod events;
 pub mod hash;
+pub mod stats;
 pub mod types;

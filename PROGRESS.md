@@ -6,8 +6,9 @@
 
 ## Status
 
-- **Current phase:** Phase 0 — Foundations [DONE] (commit history tells the story)
-- **Sub-step:** awaiting user go-ahead to begin Phase 1.
+- **Current phase:** Phase 1 — Rust data + book + backtest core [IN PROGRESS]
+- **Sub-step:** verifying Hyperliquid API schemas, then core types → events →
+  book → recorder → WS client → sample capture → backtest → benches → ADR-002.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 

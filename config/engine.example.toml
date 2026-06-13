@@ -24,6 +24,34 @@ capture_dir = "data/capture"
 # Committed sample slice used by the offline demo and the CI smoke test.
 sample_dir = "data/sample"
 
+[market_data]
+# Market data is public and keyless; backtests, recording, and paper trading
+# read the MAINNET feed for data quality. Trading is gated separately by
+# engine.mode above, which rejects mainnet outright.
+ws_url = "wss://api.hyperliquid.xyz/ws"
+# Bounded feed->consumer queue; when full, events are dropped and counted
+# (visible in recorder output) rather than buffered without limit.
+channel_capacity = 8192
+
+[backtest]
+# Recorded event log to replay; provenance and hash in data/README.md.
+data_file = "data/sample/btc-sample.qnts"
+# Starting cash (quote currency, decimal string).
+initial_cash = "100000"
+# Fee tier in parts-per-million of notional (Hyperliquid base tier).
+taker_fee_ppm = 450 # 0.045%
+maker_fee_ppm = 150 # 0.015%
+
+[backtest.strategy]
+# Plumbing-demo strategy: SMA crossover on the L2 mid-price. It exists to
+# exercise the engine deterministically end to end, not to make money; the
+# README says so in as many words. Windows are counted in L2 snapshots
+# (Hyperliquid pushes at most ~2 per second).
+name = "sma_cross"
+fast = 120
+slow = 600
+order_qty = "0.01"
+
 [logging]
 level = "info"    # trace | debug | info | warn | error
 format = "pretty" # pretty (development) | json (production collectors)

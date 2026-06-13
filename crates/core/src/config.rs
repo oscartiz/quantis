@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::types::{Cash, Qty};
+
 /// Errors produced while loading or validating an [`EngineConfig`].
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -58,6 +60,10 @@ pub struct EngineConfig {
     pub instrument: InstrumentSection,
     /// Where market data is read from and written to.
     pub data: DataSection,
+    /// Market-data feed settings.
+    pub market_data: MarketDataSection,
+    /// Backtest settings.
+    pub backtest: BacktestSection,
     /// Log verbosity and output encoding.
     pub logging: LoggingSection,
 }
@@ -90,6 +96,84 @@ pub struct DataSection {
     pub capture_dir: PathBuf,
     /// Committed sample data used by the offline demo and CI smoke test.
     pub sample_dir: PathBuf,
+}
+
+/// Market-data feed settings. Market data is public and keyless; reading the
+/// mainnet feed is unrelated to (and ungated by) the trading `mode`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MarketDataSection {
+    /// WebSocket URL, e.g. `wss://api.hyperliquid.xyz/ws`.
+    pub ws_url: String,
+    /// Bounded feed→consumer queue size; when full, events are dropped and
+    /// counted rather than buffered without limit.
+    pub channel_capacity: usize,
+}
+
+/// Backtest settings.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BacktestSection {
+    /// Recorded event log to replay.
+    pub data_file: PathBuf,
+    /// Starting cash in quote currency, as a decimal string (e.g. `"100000"`).
+    pub initial_cash: String,
+    /// Taker fee in parts-per-million of notional (450 = 0.045%).
+    pub taker_fee_ppm: i64,
+    /// Maker fee in parts-per-million of notional (150 = 0.015%).
+    pub maker_fee_ppm: i64,
+    /// Strategy under test.
+    pub strategy: StrategySection,
+}
+
+impl BacktestSection {
+    /// Parsed starting cash. Only meaningful after [`EngineConfig::validate`].
+    pub fn initial_cash(&self) -> Result<Cash, ConfigError> {
+        self.initial_cash
+            .parse()
+            .map_err(|_| ConfigError::Invalid("backtest.initial_cash must be a decimal".into()))
+    }
+}
+
+/// Strategy under test. Flat schema while exactly one Rust strategy exists;
+/// becomes per-strategy tables when a second one lands.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StrategySection {
+    /// Which strategy to run.
+    pub name: StrategyName,
+    /// Fast SMA window, in L2 snapshots.
+    pub fast: u32,
+    /// Slow SMA window, in L2 snapshots.
+    pub slow: u32,
+    /// Order size in base units, as a decimal string (e.g. `"0.01"`).
+    pub order_qty: String,
+}
+
+impl StrategySection {
+    /// Parsed order size. Only meaningful after [`EngineConfig::validate`].
+    pub fn order_qty(&self) -> Result<Qty, ConfigError> {
+        self.order_qty
+            .parse()
+            .map_err(|_| ConfigError::Invalid("strategy.order_qty must be a decimal".into()))
+    }
+}
+
+/// Known strategies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StrategyName {
+    /// SMA crossover on L2 mid-price; exists to exercise the engine
+    /// deterministically, not to make money.
+    SmaCross,
+}
+
+impl fmt::Display for StrategyName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::SmaCross => "sma_cross",
+        })
+    }
 }
 
 /// Logging settings.
@@ -176,6 +260,45 @@ impl EngineConfig {
                 "instrument.symbol must be non-empty".into(),
             ));
         }
+        if !self.market_data.ws_url.starts_with("wss://")
+            && !self.market_data.ws_url.starts_with("ws://")
+        {
+            return Err(ConfigError::Invalid(
+                "market_data.ws_url must be a ws:// or wss:// URL".into(),
+            ));
+        }
+        if self.market_data.channel_capacity == 0 {
+            return Err(ConfigError::Invalid(
+                "market_data.channel_capacity must be >= 1".into(),
+            ));
+        }
+        for (name, ppm) in [
+            ("taker_fee_ppm", self.backtest.taker_fee_ppm),
+            ("maker_fee_ppm", self.backtest.maker_fee_ppm),
+        ] {
+            if !(0..=100_000).contains(&ppm) {
+                return Err(ConfigError::Invalid(format!(
+                    "backtest.{name} must be in 0..=100000 (got {ppm})"
+                )));
+            }
+        }
+        if self.backtest.initial_cash()?.raw() <= 0 {
+            return Err(ConfigError::Invalid(
+                "backtest.initial_cash must be positive".into(),
+            ));
+        }
+        let strat = &self.backtest.strategy;
+        if strat.fast == 0 || strat.fast >= strat.slow {
+            return Err(ConfigError::Invalid(format!(
+                "strategy windows must satisfy 0 < fast < slow (got fast={}, slow={})",
+                strat.fast, strat.slow
+            )));
+        }
+        if strat.order_qty()?.raw() <= 0 {
+            return Err(ConfigError::Invalid(
+                "strategy.order_qty must be positive".into(),
+            ));
+        }
         Ok(())
     }
 }
@@ -202,6 +325,22 @@ symbol = "BTC"
 [data]
 capture_dir = "data/capture"
 sample_dir = "data/sample"
+
+[market_data]
+ws_url = "wss://api.hyperliquid.xyz/ws"
+channel_capacity = 8192
+
+[backtest]
+data_file = "data/sample/btc-sample.qnts"
+initial_cash = "100000"
+taker_fee_ppm = 450
+maker_fee_ppm = 150
+
+[backtest.strategy]
+name = "sma_cross"
+fast = 120
+slow = 600
+order_qty = "0.01"
 
 [logging]
 level = "info"
@@ -242,6 +381,34 @@ format = "pretty"
     #[test]
     fn empty_symbol_is_rejected() {
         let raw = base_toml("paper").replace("\"BTC\"", "\" \"");
+        let config: EngineConfig = toml::from_str(&raw).unwrap();
+        assert!(matches!(
+            config.validate().unwrap_err(),
+            ConfigError::Invalid(_)
+        ));
+    }
+
+    #[test]
+    fn inverted_sma_windows_are_rejected() {
+        let raw = base_toml("paper").replace("fast = 120", "fast = 600");
+        let config: EngineConfig = toml::from_str(&raw).unwrap();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("fast < slow"), "{err}");
+    }
+
+    #[test]
+    fn absurd_fees_are_rejected() {
+        let raw = base_toml("paper").replace("taker_fee_ppm = 450", "taker_fee_ppm = 500000");
+        let config: EngineConfig = toml::from_str(&raw).unwrap();
+        assert!(matches!(
+            config.validate().unwrap_err(),
+            ConfigError::Invalid(_)
+        ));
+    }
+
+    #[test]
+    fn non_decimal_order_qty_is_rejected() {
+        let raw = base_toml("paper").replace("order_qty = \"0.01\"", "order_qty = \"lots\"");
         let config: EngineConfig = toml::from_str(&raw).unwrap();
         assert!(matches!(
             config.validate().unwrap_err(),
