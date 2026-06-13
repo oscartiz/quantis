@@ -27,17 +27,22 @@ jobs:
       - run: cargo check -p quantis-python
 
   python:
-    name: Python (ruff, mypy, pytest)
+    name: Python (ruff, mypy, pytest + cross-language)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: python
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - run: uv sync --group dev
+      # Build the Rust extension into the venv so the cross-language tests
+      # (Python-driven backtest must reproduce the golden hash) actually run.
+      - run: uv run maturin develop --release -m ../crates/python/Cargo.toml
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run mypy quantis tests

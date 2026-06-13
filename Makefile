@@ -3,14 +3,18 @@
 PY_DIR := python
 ENGINE_EXAMPLE := config/engine.example.toml
 
-.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo smoke bench
+.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo smoke bench bindings
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-setup: ## Sync the Python env and install pre-commit hooks
+setup: ## Sync the Python env, build the Rust extension, install pre-commit hooks
 	cd $(PY_DIR) && uv sync --group dev
+	$(MAKE) bindings
 	uvx pre-commit install
+
+bindings: ## Build the Rust PyO3 extension into the Python venv (maturin develop)
+	cd $(PY_DIR) && uv run maturin develop --release -m ../crates/python/Cargo.toml
 
 fmt: ## Auto-format Rust and Python
 	cargo fmt --all

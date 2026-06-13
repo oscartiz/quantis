@@ -10,5 +10,6 @@
 pub mod engine;
 pub mod fill;
 pub mod report;
+pub mod runner;
 pub mod strategy;
 pub mod synthetic;

@@ -11,6 +11,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3.workspace = true
+# Aliased to avoid colliding with this crate's own lib name (`quantis_core`,
+# the Python module).
+qcore = { package = "quantis-core", path = "../core" }
+quantis-backtest = { path = "../backtest" }
+quantis-market-data = { path = "../market-data" }
+serde_json = "1"
 
 [features]
 # Enabled by maturin builds (see pyproject.toml in this directory); left off

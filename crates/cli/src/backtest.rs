@@ -1,81 +1,16 @@
 //! `quantis backtest`: replay an event log through a strategy and emit a
-//! seeded, hashed results artifact.
+//! seeded, hashed results artifact. Orchestration lives in
+//! `quantis_backtest::runner` so this command and the PyO3 binding share one
+//! code path and cannot produce different results.
 
 use std::path::Path;
 
-use anyhow::Context;
-use quantis_backtest::engine::{EngineParams, run};
-use quantis_backtest::fill::FillParams;
-use quantis_backtest::report::{
-    DeterministicSection, MetricsSection, ResultsArtifact, RuntimeSection, build_profile,
-    current_git_sha,
-};
-use quantis_backtest::strategy::SmaCross;
-use quantis_core::config::{EngineConfig, StrategyName};
-use quantis_core::hash::sha256_file;
-use quantis_core::types::TsNanos;
-use quantis_market_data::recorder::EventReader;
+use quantis_backtest::runner::run_from_config;
 
 pub fn run_backtest(config_path: &Path, expect_hash: Option<&str>) -> anyhow::Result<()> {
-    let config = EngineConfig::load(config_path)?;
-    crate::init_logging(&config.logging);
-
-    let data_file = &config.backtest.data_file;
-    let data_sha256 = sha256_file(data_file)
-        .with_context(|| format!("hashing data file {}", data_file.display()))?;
-    let config_sha256 = sha256_file(config_path)?;
-
-    let reader = EventReader::open(data_file)?;
-    let header = reader.header().clone();
-    anyhow::ensure!(
-        header.instrument == config.instrument.symbol,
-        "data file is for {} but config trades {}",
-        header.instrument,
-        config.instrument.symbol
-    );
-
-    let strat_cfg = &config.backtest.strategy;
-    let mut strategy = match strat_cfg.name {
-        StrategyName::SmaCross => {
-            SmaCross::new(strat_cfg.fast, strat_cfg.slow, strat_cfg.order_qty()?)
-        }
-    };
-    let params = EngineParams {
-        initial_cash: config.backtest.initial_cash()?,
-        fill: FillParams {
-            taker_fee_ppm: config.backtest.taker_fee_ppm,
-            maker_fee_ppm: config.backtest.maker_fee_ppm,
-        },
-    };
-
-    // Truncated logs abort the run: a backtest on silently shortened data
-    // would be a result about the wrong dataset.
-    let events = reader.map(|r| r.expect("event log corrupt; re-record or re-fetch"));
-    let summary = run(events, &mut strategy, &params);
-
-    let artifact = ResultsArtifact::new(
-        DeterministicSection {
-            seed: config.engine.seed,
-            config_sha256,
-            data_file: data_file.display().to_string(),
-            data_sha256,
-            instrument: config.instrument.symbol.clone(),
-            strategy: strat_cfg.name.to_string(),
-            metrics: MetricsSection::from_summary(&summary),
-        },
-        RuntimeSection {
-            git_sha: current_git_sha(),
-            created_unix_ms: TsNanos::now().as_millis(),
-            build_profile: build_profile(),
-            events_per_sec: summary.timing.events_per_sec,
-            p50_ns: summary.timing.p50_ns,
-            p95_ns: summary.timing.p95_ns,
-            p99_ns: summary.timing.p99_ns,
-            max_ns: summary.timing.max_ns,
-        },
-    );
-
+    let artifact = run_from_config(config_path)?;
     let out_path = artifact.write_to_dir(Path::new("results"))?;
+
     let m = &artifact.deterministic.metrics;
     println!(
         "backtest: {} events ({} snapshots, {} md trades) on {}",

@@ -825,6 +825,10 @@ name = "quantis-python"
 version = "0.1.0"
 dependencies = [
  "pyo3",
+ "quantis-backtest",
+ "quantis-core",
+ "quantis-market-data",
+ "serde_json",
 ]
 
 [[package]]
