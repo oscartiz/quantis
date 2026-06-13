@@ -10,12 +10,32 @@ from quantis.evaluation.cross_validation import (
     splits_from_config,
     walk_forward,
 )
+from quantis.evaluation.metrics import (
+    deflated_sharpe_ratio,
+    expected_max_sharpe,
+    max_drawdown,
+    probabilistic_sharpe_ratio,
+    sharpe_ratio,
+    sortino_ratio,
+)
+from quantis.evaluation.multiple_testing import SpaResult, spa_test
+from quantis.evaluation.trial_log import TrialLog, TrialRecord
 
 __all__ = [
     "LeakageError",
+    "SpaResult",
     "Split",
+    "TrialLog",
+    "TrialRecord",
     "assert_no_leakage",
+    "deflated_sharpe_ratio",
+    "expected_max_sharpe",
+    "max_drawdown",
+    "probabilistic_sharpe_ratio",
     "purged_kfold",
+    "sharpe_ratio",
+    "sortino_ratio",
+    "spa_test",
     "splits_from_config",
     "walk_forward",
 ]
