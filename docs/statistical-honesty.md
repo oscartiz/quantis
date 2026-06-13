@@ -1,0 +1,125 @@
+# Statistical honesty
+
+This document is the reviewer-facing summary of how Quantis avoids fooling
+itself — and the one-shot holdout result, reported as-is. It consolidates
+mechanisms that live in code and tests; every claim here is backed by something
+runnable, cited inline.
+
+The order matters: each defence below blocks a specific, well-known way that a
+backtest produces a number that does not survive contact with reality.
+
+## 1. Look-ahead bias — features cannot see the future
+
+Every feature is causal by construction (NaN warmup, no forward fill), and the
+guarantee is *tested*, not asserted. The leakage check
+(`quantis.features.is_causal`) uses an **expanding-window-endpoint** test: a
+causal feature computed on `series[:t+1]` must reproduce the full-series value
+at `t`. A forward-peeking feature cannot, and the canary test registers two
+deliberately leaky features (a future return and a centered mean) and proves the
+check catches both while the five real features pass.
+
+- Code: `python/quantis/features/pipeline.py`
+- Test: `tests/test_features.py::test_canary_flags_forward_peeking_feature`
+
+The same principle is enforced at the *model* level: the HMM's smoothed
+posterior is non-causal and is used only for analysis/plotting; the **filtered**
+posterior (`filter_proba`) is the causal signal used for any tradeable curve,
+and its causality is tested by prefix re-runs (ADR-003).
+
+## 2. Leakage at fold boundaries — purged, embargoed CV
+
+Ordinary k-fold leaks on serially-correlated data with multi-bar labels.
+`quantis.evaluation` provides walk-forward (expanding, strictly causal) and
+**purged k-fold** splits: training samples whose label window overlaps the test
+fold are purged, and an embargo drops a post-fold buffer. `assert_no_leakage`
+is the CV-level canary — a test proves it catches a naive unpurged k-fold and
+passes the purged one.
+
+- Code: `python/quantis/evaluation/cross_validation.py`
+- Test: `tests/test_cross_validation.py::test_leakage_guard_catches_unpurged_kfold`
+
+## 3. Multiple testing — Deflated Sharpe and SPA
+
+Search enough strategies and the best one's Sharpe is inflated by luck. Two
+corrections, computed over a **logged** trial history (not a guessed count):
+
+- **Deflated Sharpe Ratio** — the probabilistic Sharpe with the benchmark set
+  to the expected maximum Sharpe across the trials searched. Demonstrated: the
+  best of 200 zero-edge strategies has a naive PSR > 0.9 but a **DSR < 0.7**.
+- **Hansen's SPA / White's Reality Check** — bootstrap tests of whether the best
+  strategy beats the benchmark given the whole set. Demonstrated: ignores pure
+  noise yet detects an injected edge, and SPA is never less powerful than RC.
+
+- Code: `python/quantis/evaluation/{metrics,multiple_testing,trial_log}.py`
+- Tests: `tests/test_evaluation_stats.py`
+
+## 4. Survivorship and instrument choice
+
+Stated plainly because it cannot be fully fixed: choosing BTC because it is
+liquid *today* is itself a survivorship decision. The method must generalize to
+instruments selected ex-ante; the multi-asset event model and risk layer are
+built for that, but the demonstrated results are single-asset and should be read
+as such. The bundled candle data's earliest span has zero exchange volume
+(backfilled OHLC), documented in `data/sample/PROVENANCE.md`, and volume-based
+features are not used there.
+
+## 5. Out-of-sample discipline — the holdout, evaluated once
+
+The last 20% of the candle history was sealed **before** any holdout
+evaluation: the manifest (boundary + content hash) was committed
+(`data/sample/holdout-manifest.json`) in its own commit. `load_research` refuses
+to return anything past the boundary; `reveal_holdout` is gated on an explicit
+acknowledgement and re-verifies the hash. The model was fit on the research
+partition only, and the strategy evaluated on the holdout **exactly once**.
+
+### The result (reported as-is)
+
+Holdout span: **2025-10-05 → 2026-06-13** (231 evaluated days).
+
+| metric | causal regime strategy | buy & hold |
+|---|---|---|
+| total return | **+19.9%** | −42.7% |
+| Sharpe (ann.) | **+1.40** | −1.84 |
+| Sortino (ann.) | +3.32 | — |
+| max drawdown | **9.5%** | 50.6% |
+| time in market | 13% | 100% |
+
+Reproduce: `uv run --project python python python/scripts/evaluate_holdout.py`.
+
+### How to read it honestly
+
+This is a **good out-of-sample number, and it is also N = 1 in the strategy's
+favourable environment.** The holdout window happened to be a *bear market*, and
+the strategy is a long-only-in-bull-regime risk filter — its entire design is to
+go to cash when it does not see a bull regime. So "avoided a −43% drawdown and
+ended +20% at 13% exposure" is the strategy doing exactly what it is built to do
+in exactly the conditions built for. It is **not** evidence of a robust,
+all-weather edge:
+
+- On the *in-sample* span (2023–2025, bull-dominated), the same strategy
+  **underperformed** buy-and-hold on Sharpe (0.32 vs 0.65) — it gave up upside.
+  See the dashboard.
+- One 8-month holdout, however favourable, cannot establish an edge. A single
+  draw from a distribution is a single draw.
+
+The honest conclusion: this is a **risk-reducing regime filter** with a strong
+showing in one bear holdout and a weak showing in a bull in-sample period — i.e.
+it trades return for drawdown protection, period-dependently. That is a finding
+worth reporting truthfully, not an alpha to advertise. The credibility is in the
+*discipline that produced the number* (sealed, hashed, evaluated once), not in
+the number being large.
+
+## 6. Transaction-cost and capacity reality
+
+A number is also dishonest if it ignores what trading costs. `docs/losing-money.md`
+quantifies fee sensitivity (fees ×1/×2/×3 → −2.82/−4.83/−6.84 on the L2 demo),
+the latency-resolution ceiling, capacity mechanics, and regime instability. The
+holdout figures above are net of a 5 bps round-trip cost; at 13% time in market
+the cost drag is small, but a higher-turnover variant would erode it.
+
+## What none of this proves
+
+That the strategy will make money live. These mechanisms prevent specific
+self-deceptions; they do not manufacture edge. The most they establish is that
+*if* there is an edge, this process will not have invented it — and that when
+there is not, the process says so.
