@@ -6,8 +6,23 @@
 
 ## Status
 
-- **Current phase:** Phase 4 — paper/testnet execution + observability + chaos [DONE]
-- **Sub-step:** awaiting go-ahead for Phase 5 (dashboard, docs polish, one-shot holdout).
+- **Current phase:** Phase 5 — dashboard + docs + one-shot holdout [DONE]
+- **Project status: ALL PHASES COMPLETE (0–5).**
+
+### Phase 5 — all [DONE]
+- [DONE] Bundled 3.5y BTC daily candles (HL, hash-pinned) as the regime dataset.
+- [DONE] `GaussianHMM.filter_proba` (causal forward-only inference) + causality test.
+- [DONE] `quantis/data/candles.py` loader; `quantis/dashboard/report.py` static
+  self-contained HTML (regime overlay, equity vs hold, rolling Sharpe/Sortino,
+  drawdown, exposure, per-regime attribution). `make demo` renders it in <5s.
+- [DONE] Holdout sealed + manifest committed BEFORE evaluation; `evaluate_holdout.py`
+  fits on research, reveals holdout once. Result: bear holdout, strategy +19.9%
+  at 13% exposure (Sharpe +1.40) vs hold -42.7% — reported honestly as N=1.
+- [DONE] docs: architecture.md (C4), scaling.md, statistical-honesty.md; README
+  final pass + Known Limitations; ADR index complete (000–006).
+
+**Verified end of Phase 5:** 84 Rust tests, 60 Python tests, fmt/clippy/mypy
+clean, golden-hash smoke passes. `make demo` offline in <5s.
 
 ### Phase 4 — all [DONE]
 - [DONE] `execution::order`/`manager`: idempotent order state machine (fills
@@ -74,31 +89,23 @@ Build extension before pytest: `make bindings` (CI does this in the python job).
 clean, mypy strict clean, golden-hash smoke passes. Cross-language determinism
 holds (Python-driven backtest == CLI hash).
 
-## NEXT ACTION (Phase 5)
+## NEXT ACTION
 
-On **"CONTINUE"**: begin Phase 5 — dashboard, docs polish, the one holdout shot.
-Build order:
-1. Python research dashboard: a single script that loads the sample (via the
-   `quantis_core` bindings), runs the feature pipeline + a regime model, and
-   renders a **static, self-contained HTML** report — equity curve, regime
-   overlay on price, rolling Sharpe/Sortino, drawdown, exposure, per-regime
-   trade attribution. No JS server; matplotlib→inline-PNG or a templated HTML.
-2. `make demo` upgrade: one command that runs the seeded backtest AND renders
-   the dashboard, offline, in <5 min (the README promise).
-3. `docs/architecture.md`: C4-style component + data/event-flow diagram.
-4. `docs/scaling.md`: one strategy/venue → many (multi-asset event model is
-   already there; describe the path, incl. tick/L3 data for the latency ceiling).
-5. The statistical-honesty doc (consolidate leakage/CV/DSR/SPA/holdout into one
-   reviewer-facing narrative).
-6. **The holdout, evaluated exactly once.** Seal a holdout on real captured
-   data (commit the manifest), then run `reveal_holdout` a single time and
-   report whatever it says — a mediocre honest number is the feature.
-7. README final pass + "Known limitations & future work".
+**The phased build (0–5) is complete.** No phase remains. Optional follow-ups,
+in rough priority order (none required for the project to stand on its own):
 
-Note: Phase 5 dashboard needs a slightly larger/real dataset than the 15-min
-sample to be visually meaningful; capture one with `quantis record` at phase
-start, or generate a longer synthetic-but-clearly-labelled series for the
-plumbing and use the real capture for the holdout.
+1. Walk-forward refit across many windows to turn the N=1 holdout into a
+   distribution (the honest next rigorous step).
+2. Deep-L2/L3 backfill to lift the latency/queue resolution ceiling (ADR-004).
+3. A maker strategy to exercise the conservative queue model end to end.
+4. Multi-asset: portfolio risk aggregate + cross-asset regime research.
+5. Wire the testnet `ActionSigner` with a real key and measure the paper↔testnet
+   gap (ADR-006).
+
+On **"CONTINUE"** with no new instruction: pick item (1) — extend
+`evaluate_holdout.py` to a walk-forward harness reporting the out-of-sample
+Sharpe distribution, since it most directly strengthens the central honesty
+claim.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
