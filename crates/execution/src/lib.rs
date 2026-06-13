@@ -12,12 +12,16 @@
 
 pub mod gateway;
 pub mod manager;
+pub mod metrics;
 pub mod order;
 pub mod paper;
+pub mod reconcile;
 
 pub use gateway::{GatewayError, OrderGateway};
 pub use manager::{Applied, OrderManager};
+pub use metrics::TradingMetrics;
 pub use order::{
     ClientOrderId, CloidGenerator, ExecReport, Order, OrderKind, OrderRequest, OrderStatus,
 };
 pub use paper::PaperGateway;
+pub use reconcile::{ReconcileReport, reconcile};
