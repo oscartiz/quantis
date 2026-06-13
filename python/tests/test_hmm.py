@@ -102,6 +102,22 @@ def test_posteriors_are_normalized(three_regime_data: tuple[Array, NDArray[np.in
     assert np.all(gamma >= -1e-12)
 
 
+def test_filtered_is_causal_and_differs_from_smoothed(
+    three_regime_data: tuple[Array, NDArray[np.int64]],
+) -> None:
+    obs, _ = three_regime_data
+    model = GaussianHMM(n_states=3, seed=0).fit(obs)
+    filtered = model.filter_proba(obs)
+    smoothed = model.predict_proba(obs)
+    assert np.allclose(filtered.sum(axis=1), 1.0)
+    # filtering uses no future data, so it must differ from smoothing somewhere
+    assert not np.allclose(filtered, smoothed)
+    # causality: the filtered estimate at t equals re-running on the prefix x[:t+1]
+    for t in (100, 1500, 2500):
+        prefix = model.filter_proba(obs[: t + 1])
+        assert np.allclose(prefix[t], filtered[t], atol=1e-9)
+
+
 def test_rejects_nan_input() -> None:
     obs = np.array([[0.0], [np.nan], [1.0]])
     with pytest.raises(ValueError, match="NaN or inf"):

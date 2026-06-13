@@ -33,6 +33,22 @@ fixed-point math, or data handling that alters results fails the build.
   (the two clocks are not synchronized), so it is an upper bound on true
   network latency, not a clean measurement of it. Reported, not hidden.
 
+## `btc-1d-candles.csv`
+
+- **Instrument:** BTC perpetual, Hyperliquid mainnet.
+- **Source:** Hyperliquid `info` endpoint, `candleSnapshot`, interval `1d`.
+- **Span:** 2023-01-01 → 2026-06-13 (1,260 daily candles).
+- **Columns:** `open_ms,open,high,low,close,volume`.
+- **SHA-256:** `8580eaa005b7c37d692e3f1bbeeea3eac4127c72244f48d4d98e329e238f6c3f`
+- **Why bundled:** the regime research dashboard and the one-shot holdout need
+  longer *bar* history than 15 minutes of L2 can provide. Daily candles over
+  ~3.5 years span a real bear bottom (~$16.5k, Jan 2023), recovery, and later
+  ranges — enough for the regime models to find economically meaningful states.
+- **Quality note:** the earliest candles carry `volume = 0` (Hyperliquid
+  backfilled OHLC before its own volume existed). Close prices are real BTC, so
+  return-based regime analysis is unaffected; volume-based features on the early
+  span would not be, and are not used.
+
 ## Limitations
 
 - 15 minutes is enough to exercise the engine end to end and to support the

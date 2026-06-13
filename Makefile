@@ -42,8 +42,10 @@ test-python: ## Python tests
 ci: fmt-check lint test ## Everything CI runs, locally
 	@echo "All CI checks passed."
 
-demo: ## Seeded backtest on the bundled sample data (research dashboard arrives Phase 5)
+demo: ## Seeded backtest on the bundled sample + render the research dashboard (offline, <5 min)
 	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE)
+	cd $(PY_DIR) && uv run python scripts/render_dashboard.py
+	@echo "Open results/dashboard.html in a browser."
 
 smoke: ## Deterministic backtest must reproduce the committed golden hash
 	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE) \

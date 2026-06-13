@@ -135,7 +135,12 @@ class GaussianHMM:
         return self._score(self._require_params_match(x), _ensure_2d(x))
 
     def predict_proba(self, x: Array) -> Array:
-        """Smoothed state posteriors ``gamma[t, k]`` (uses the whole sequence)."""
+        """Smoothed state posteriors ``gamma[t, k]`` (uses the whole sequence).
+
+        **Non-causal**: the estimate at time ``t`` depends on data after ``t``.
+        Use for analysis and plotting, never as a trading signal — see
+        [`filter_proba`] for the causal counterpart and ADR-003.
+        """
         params = self._require_params_match(x)
         obs = _ensure_2d(x)
         log_b = _log_gaussian(obs, params.means, params.variances)
@@ -143,6 +148,22 @@ class GaussianHMM:
         log_beta = self._backward(params, log_b)
         gamma, _ = self._posteriors(params, log_b, log_alpha, log_beta, ll)
         return gamma
+
+    def filter_proba(self, x: Array) -> Array:
+        """Filtered state posteriors ``p(state_t | x_1..t)`` — **causal**.
+
+        Forward pass only: the estimate at ``t`` uses no future data, so unlike
+        [`predict_proba`] this may be used as a trading signal (under fixed,
+        already-fit parameters). The contrast between the two is the look-ahead
+        lesson of ADR-003 made numerical.
+        """
+        params = self._require_params_match(x)
+        obs = _ensure_2d(x)
+        log_b = _log_gaussian(obs, params.means, params.variances)
+        log_alpha, _ = self._forward(params, log_b)
+        log_norm = logsumexp(log_alpha, axis=1, keepdims=True)
+        filtered: Array = np.exp(log_alpha - log_norm)
+        return filtered
 
     def predict(self, x: Array) -> NDArray[np.int64]:
         """Most likely state sequence (Viterbi MAP decoding)."""
