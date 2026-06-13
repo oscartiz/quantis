@@ -15,6 +15,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "hmmlearn>=0.3.3",
   "maturin>=1.14.0",
   "mypy>=1.13",
   "pytest>=8.0",
@@ -41,6 +42,11 @@ plugins = ["pydantic.mypy"]
 # the typed boundary is the thin wrapper in quantis/engine.py.
 [[tool.mypy.overrides]]
 module = "quantis_core"
+ignore_missing_imports = true
+
+# scipy.special is not fully typed; hmmlearn (test oracle only) ships no stubs.
+[[tool.mypy.overrides]]
+module = ["scipy.special", "hmmlearn.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
