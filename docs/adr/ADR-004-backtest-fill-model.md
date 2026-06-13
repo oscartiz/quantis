@@ -60,20 +60,31 @@ future work (see `docs/scaling.md`). Until then, **backtest latency cost is a
 lower bound**, and `docs/losing-money.md` treats latency as a sensitivity axis
 rather than a settled number.
 
-## Resting limit orders and queue position
+## Resting limit orders and queue position (now built and exercised)
 
-The shipped strategy is taker-only, so v1 integrates the market path fully and
-specifies — but does not yet wire to a strategy — the maker path:
+The maker path is implemented and tested end to end (`FillEngine::match_resting`,
+the engine's trade-driven resting-order loop, and the `PassiveMaker` strategy):
 
 - A resting limit order joins the **back** of the queue at its level. It fills
-  only after all size that was ahead of it at submission, plus its own size,
-  has traded through (the *conservative* / pessimistic queue assumption: you
-  are last in line). With snapshot data we cannot observe true queue position,
-  so the pessimistic assumption is the honest default — it never *over*-credits
-  maker fills.
+  only after all size that was ahead of it at submission has traded through (the
+  *conservative* / pessimistic queue assumption: you are last in line), then
+  fills at its resting price (no improvement) with the **maker** fee. With
+  snapshot data we cannot observe true queue position, so the pessimistic
+  assumption is the honest default — it never *over*-credits maker fills.
+- A resting buy is filled only by sell-aggressor trades at or below its price
+  (and vice-versa); the queue ahead is seeded from the visible size at the level
+  when the order arrives.
 
-This is the next fill-model increment; it lands with a maker strategy so it is
-exercised end to end rather than shipped untested.
+This is verified two ways: a unit test that the order waits for the queue to
+clear before filling at the maker fee, and an engine test that runs the maker
+strategy with the **taker fee non-zero but the maker fee zero** and asserts the
+realized fees are exactly zero — proving every fill came through the resting
+(maker) path, not the taker path. The market path and its golden hash are
+unchanged by this addition.
+
+Still simplified (honest scope): the maker strategy holds one resting order at a
+time and does not model cancellation/replacement latency or partial-fill queue
+re-estimation; those, and true L3 queue position, need tick data (`scaling.md`).
 
 ## Alternatives considered
 

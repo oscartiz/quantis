@@ -1,11 +1,16 @@
 //! The matching/fill engine — single source of truth for fills.
 //!
-//! Phase 1 (v0) scope, stated plainly: **market orders only**, filled by
-//! walking the visible ladder of the most recent L2 snapshot, with zero
-//! submission latency and taker fees. There is no queue modelling, no
-//! funding, and no latency injection yet — Phase 3 adds them (ADR-004).
-//! Until then, backtest results are optimistic by construction, and every
-//! artifact this engine produces is interpreted with that caveat.
+//! Two paths, both here and both reused by the paper gateway (ADR-004):
+//!
+//! - [`FillEngine::market`]: a market order walks the visible ladder of the
+//!   most recent L2 snapshot and pays the taker fee; depth it cannot absorb is
+//!   reported, never invented. Latency and funding are applied by the engine
+//!   loop around it.
+//! - [`FillEngine::match_resting`]: a resting limit order fills via the
+//!   **conservative back-of-queue** model — adverse trades first clear the
+//!   queue that was ahead of it, then fill it at its price (no improvement)
+//!   with the maker fee. With snapshot data true queue position is
+//!   unobservable, so "last in line" is the honest default.
 
 use quantis_core::types::{Cash, Px, Qty, Side, TsNanos};
 use quantis_market_data::book::OrderBook;
@@ -102,6 +107,95 @@ impl FillEngine {
     }
 }
 
+/// A resting limit order matched by the **conservative back-of-queue** model
+/// (ADR-004): the order joins the back of the queue at its price, so all size
+/// that was ahead of it at placement must trade through before it fills. With
+/// snapshot data we cannot observe true queue position, so assuming we are last
+/// in line is the honest default — it never over-credits a maker fill.
+#[derive(Debug, Clone, Copy)]
+pub struct RestingOrder {
+    /// Side of the resting order.
+    pub side: Side,
+    /// Resting price.
+    pub px: Px,
+    /// Total order size.
+    pub qty: Qty,
+    /// Quantity filled so far.
+    pub filled: Qty,
+    /// Remaining size ahead of us in the queue (decremented by adverse trades).
+    pub queue_ahead: Qty,
+}
+
+impl RestingOrder {
+    /// A new resting order behind `queue_ahead` of existing size at its level.
+    pub fn new(side: Side, px: Px, qty: Qty, queue_ahead: Qty) -> Self {
+        Self {
+            side,
+            px,
+            qty,
+            filled: Qty::ZERO,
+            queue_ahead,
+        }
+    }
+
+    /// Remaining unfilled quantity.
+    pub fn remaining(&self) -> Qty {
+        self.qty - self.filled
+    }
+
+    /// True once fully filled.
+    pub fn is_done(&self) -> bool {
+        self.remaining().raw() <= 0
+    }
+}
+
+impl FillEngine {
+    /// Apply one trade print to a resting order under the queue model; returns a
+    /// maker [`Fill`] if the order (partially) fills.
+    ///
+    /// A resting buy is filled only by sell-aggressor trades at or below its
+    /// price (and vice-versa); the trade volume first clears the remaining
+    /// queue ahead, and only the surplus fills the order, at the resting price
+    /// (no improvement) with the maker fee.
+    pub fn match_resting(
+        &self,
+        order: &mut RestingOrder,
+        trade: &quantis_core::events::Trade,
+    ) -> Option<Fill> {
+        let eligible = match order.side {
+            Side::Buy => trade.side == Side::Sell && trade.px.raw() <= order.px.raw(),
+            Side::Sell => trade.side == Side::Buy && trade.px.raw() >= order.px.raw(),
+        };
+        if !eligible {
+            return None;
+        }
+        let mut vol = trade.qty.raw();
+        // Clear the queue ahead first (conservative: we are last in line).
+        if order.queue_ahead.raw() > 0 {
+            let consumed = vol.min(order.queue_ahead.raw());
+            order.queue_ahead = Qty::from_raw(order.queue_ahead.raw() - consumed);
+            vol -= consumed;
+        }
+        let remaining = order.remaining().raw();
+        let take = vol.min(remaining);
+        if take <= 0 {
+            return None;
+        }
+        let take = Qty::from_raw(take);
+        order.filled += take;
+        let notional = order.px.notional(take);
+        let fee = notional.fee_ppm(self.params.maker_fee_ppm);
+        Some(Fill {
+            side: order.side,
+            px: order.px,
+            qty: take,
+            notional,
+            fee,
+            exch_ts: trade.exch_ts,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,5 +272,81 @@ mod tests {
         // visible bids hold 3 total
         assert_eq!(outcome.unfilled, "7".parse().unwrap());
         assert_eq!(outcome.fills.len(), 2);
+    }
+
+    fn trade(side: Side, px: &str, qty: &str) -> quantis_core::events::Trade {
+        quantis_core::events::Trade {
+            px: px.parse().unwrap(),
+            qty: qty.parse().unwrap(),
+            side,
+            exch_ts: TsNanos::from_millis(2_000),
+            recv_ts: TsNanos::from_millis(2_001),
+            tid: 1,
+        }
+    }
+
+    #[test]
+    fn resting_buy_waits_for_queue_then_fills_at_maker_fee() {
+        // Resting buy 1.0 @ 100, behind 2.0 of queue.
+        let mut order = RestingOrder::new(
+            Side::Buy,
+            "100".parse().unwrap(),
+            "1".parse().unwrap(),
+            "2".parse().unwrap(),
+        );
+        // A sell trade of 1.5 only eats queue (2.0 -> 0.5), no fill yet.
+        assert!(
+            engine()
+                .match_resting(&mut order, &trade(Side::Sell, "99", "1.5"))
+                .is_none()
+        );
+        assert_eq!(order.filled, Qty::ZERO);
+        // A sell trade of 1.0 clears the remaining 0.5 queue, then fills 0.5.
+        let fill = engine()
+            .match_resting(&mut order, &trade(Side::Sell, "100", "1.0"))
+            .unwrap();
+        assert_eq!(fill.qty, "0.5".parse().unwrap());
+        assert_eq!(fill.px, "100".parse().unwrap()); // no improvement
+        // maker fee = 150 ppm on 100*0.5 = 50 -> 0.0075
+        assert_eq!(fill.fee, "0.0075".parse().unwrap());
+    }
+
+    #[test]
+    fn resting_order_ignores_wrong_side_and_wrong_price() {
+        let mut order = RestingOrder::new(
+            Side::Buy,
+            "100".parse().unwrap(),
+            "1".parse().unwrap(),
+            Qty::ZERO,
+        );
+        // a BUY-aggressor trade cannot fill a resting BUY
+        assert!(
+            engine()
+                .match_resting(&mut order, &trade(Side::Buy, "100", "1"))
+                .is_none()
+        );
+        // a sell ABOVE our price does not reach us
+        assert!(
+            engine()
+                .match_resting(&mut order, &trade(Side::Sell, "101", "1"))
+                .is_none()
+        );
+        assert_eq!(order.filled, Qty::ZERO);
+    }
+
+    #[test]
+    fn resting_order_never_overfills() {
+        let mut order = RestingOrder::new(
+            Side::Sell,
+            "100".parse().unwrap(),
+            "1".parse().unwrap(),
+            Qty::ZERO,
+        );
+        // a huge buy trade fills only the remaining 1.0, not more
+        let fill = engine()
+            .match_resting(&mut order, &trade(Side::Buy, "100", "10"))
+            .unwrap();
+        assert_eq!(fill.qty, "1".parse().unwrap());
+        assert!(order.is_done());
     }
 }

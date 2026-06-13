@@ -122,6 +122,21 @@ impl OrderBook {
         Some(Px::mid(self.best_bid()?.px, self.best_ask()?.px))
     }
 
+    /// Total visible size resting at `px` on `side` (zero if no such level).
+    /// Used to seed a resting order's queue-ahead in the conservative maker
+    /// fill model.
+    pub fn size_at(&self, side: Side, px: Px) -> Qty {
+        let ladder = match side {
+            Side::Buy => &self.bids,
+            Side::Sell => &self.asks,
+        };
+        ladder
+            .iter()
+            .find(|l| l.px == px)
+            .map(|l| l.qty)
+            .unwrap_or(Qty::ZERO)
+    }
+
     /// Bid ladder, best first.
     pub fn bids(&self) -> &[Level] {
         &self.bids

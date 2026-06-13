@@ -12,13 +12,25 @@ use quantis_core::events::MarketEvent;
 use quantis_core::types::{Qty, Side};
 use quantis_market_data::book::OrderBook;
 
-/// An order request from a strategy. Phase 1: market orders only.
+/// Whether an intent crosses the spread now (market) or rests at a price
+/// (limit). Limit orders fill via the conservative queue model (ADR-004).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentKind {
+    /// Cross the spread immediately (taker).
+    Market,
+    /// Rest at this price until enough adverse volume clears the queue (maker).
+    Limit(quantis_core::types::Px),
+}
+
+/// An order request from a strategy.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OrderIntent {
     /// Direction.
     pub side: Side,
     /// Size (positive).
     pub qty: Qty,
+    /// Market or resting-limit.
+    pub kind: IntentKind,
 }
 
 /// Collector for a strategy's order intents during one event.
@@ -28,10 +40,24 @@ pub struct Actions {
 }
 
 impl Actions {
-    /// Request a market order.
+    /// Request a market order (crosses the spread).
     pub fn market(&mut self, side: Side, qty: Qty) {
         debug_assert!(qty.raw() > 0, "market() takes positive qty");
-        self.orders.push(OrderIntent { side, qty });
+        self.orders.push(OrderIntent {
+            side,
+            qty,
+            kind: IntentKind::Market,
+        });
+    }
+
+    /// Request a resting limit order at `px` (maker).
+    pub fn limit(&mut self, side: Side, qty: Qty, px: quantis_core::types::Px) {
+        debug_assert!(qty.raw() > 0, "limit() takes positive qty");
+        self.orders.push(OrderIntent {
+            side,
+            qty,
+            kind: IntentKind::Limit(px),
+        });
     }
 
     /// Drain accumulated intents (engine-side).
@@ -133,6 +159,62 @@ impl Strategy for SmaCross {
             actions.market(Side::Buy, delta);
         } else if delta.raw() < 0 {
             actions.market(Side::Sell, delta.abs());
+        }
+    }
+}
+
+/// A passive (maker) ping-pong strategy: when flat it rests a buy at the best
+/// bid; once filled (long) it rests a sell at the best ask; repeat. It holds at
+/// most one resting order at a time, so it needs no cancellation, and it exists
+/// to exercise the conservative back-of-queue maker fill model (ADR-004) end to
+/// end — not as alpha. Maker orders pay maker fees and fill only as adverse
+/// trades clear the queue ahead of them.
+#[derive(Debug)]
+pub struct PassiveMaker {
+    order_qty: Qty,
+    last_position: Qty,
+    outstanding: bool,
+}
+
+impl PassiveMaker {
+    /// New maker quoting `order_qty` per side.
+    pub fn new(order_qty: Qty) -> Self {
+        Self {
+            order_qty,
+            last_position: Qty::ZERO,
+            outstanding: false,
+        }
+    }
+}
+
+impl Strategy for PassiveMaker {
+    fn on_event(
+        &mut self,
+        event: &MarketEvent,
+        book: &OrderBook,
+        position: Qty,
+        actions: &mut Actions,
+    ) {
+        let MarketEvent::L2Snapshot(_) = event else {
+            return;
+        };
+        // A position change means our resting order (partially) filled.
+        if position != self.last_position {
+            self.last_position = position;
+            self.outstanding = false;
+        }
+        if self.outstanding {
+            return;
+        }
+        let (Some(bid), Some(ask)) = (book.best_bid(), book.best_ask()) else {
+            return;
+        };
+        if position.raw() == 0 {
+            actions.limit(Side::Buy, self.order_qty, bid.px); // join the bid queue
+            self.outstanding = true;
+        } else if position.raw() >= self.order_qty.raw() {
+            actions.limit(Side::Sell, self.order_qty, ask.px); // rest an exit at the ask
+            self.outstanding = true;
         }
     }
 }

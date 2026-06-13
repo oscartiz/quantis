@@ -19,8 +19,8 @@ use quantis_core::stats::percentiles;
 use quantis_core::types::{Cash, Qty, Side};
 use quantis_market_data::book::{BookStats, OrderBook};
 
-use crate::fill::{FillEngine, FillParams};
-use crate::strategy::{Actions, Strategy};
+use crate::fill::{FillEngine, FillParams, RestingOrder};
+use crate::strategy::{Actions, IntentKind, Strategy};
 
 /// Engine parameters (all from validated config).
 #[derive(Debug, Clone, Copy)]
@@ -37,11 +37,13 @@ pub struct EngineParams {
     pub funding_rate_ppm: i64,
 }
 
-/// A market order in flight: submitted, not yet arrived at the exchange.
+/// An order in flight: submitted, not yet arrived at the exchange. On arrival a
+/// market order fills against the book; a limit order joins the resting queue.
 #[derive(Debug, Clone, Copy)]
 struct PendingOrder {
     side: Side,
     qty: Qty,
+    kind: crate::strategy::IntentKind,
     arrival_ms: i64,
 }
 
@@ -136,6 +138,7 @@ pub fn run(
     let mut book = OrderBook::new();
     let mut actions = Actions::default();
     let mut pending: Vec<PendingOrder> = Vec::new();
+    let mut resting: Vec<RestingOrder> = Vec::new();
 
     let mut counts = EventCounts::default();
     let mut ledger = Ledger {
@@ -164,7 +167,16 @@ pub fn run(
                 counts.snapshots += 1;
                 book.apply_snapshot(snap);
             }
-            MarketEvent::Trade(_) => counts.md_trades += 1,
+            MarketEvent::Trade(trade) => {
+                counts.md_trades += 1;
+                // Trades drive resting (maker) fills via the queue model.
+                for order in resting.iter_mut() {
+                    if let Some(fill) = fill_engine.match_resting(order, trade) {
+                        apply_fills(&mut ledger, std::slice::from_ref(&fill));
+                    }
+                }
+                resting.retain(|o| !o.is_done());
+            }
             MarketEvent::Candle(_) => counts.candles += 1,
         }
 
@@ -182,17 +194,28 @@ pub fn run(
             }
         }
 
-        // Orders that have arrived fill against the current (just-updated) book.
-        // Only snapshots refresh the book, so execute there.
+        // Orders that have arrived are handled against the current (just-updated)
+        // book. Only snapshots refresh the book, so process arrivals there: a
+        // market order fills immediately; a limit order joins the resting queue
+        // behind the size already at its price.
         if matches!(event, MarketEvent::L2Snapshot(_)) {
             pending.retain(|order| {
                 if order.arrival_ms > now_ms {
                     return true; // still in flight
                 }
-                let outcome = fill_engine.market(order.side, order.qty, &book, event.exch_ts());
-                apply_fills(&mut ledger, &outcome.fills);
-                ledger.unfilled += outcome.unfilled;
-                false // arrived and processed (filled and/or unfilled)
+                match order.kind {
+                    IntentKind::Market => {
+                        let outcome =
+                            fill_engine.market(order.side, order.qty, &book, event.exch_ts());
+                        apply_fills(&mut ledger, &outcome.fills);
+                        ledger.unfilled += outcome.unfilled;
+                    }
+                    IntentKind::Limit(px) => {
+                        let queue_ahead = book.size_at(order.side, px);
+                        resting.push(RestingOrder::new(order.side, px, order.qty, queue_ahead));
+                    }
+                }
+                false // arrived and processed
             });
         }
 
@@ -202,6 +225,7 @@ pub fn run(
             pending.push(PendingOrder {
                 side: intent.side,
                 qty: intent.qty,
+                kind: intent.kind,
                 arrival_ms: now_ms + params.latency_ms,
             });
         }
@@ -210,8 +234,9 @@ pub fn run(
         event_ns.push(t0.elapsed().as_nanos() as i64);
     }
 
-    // Orders still in flight at end of data never fill.
-    let expired_qty = pending.iter().fold(Qty::ZERO, |acc, o| acc + o.qty);
+    // Orders still in flight, or still resting unfilled, at end of data.
+    let expired_qty = pending.iter().fold(Qty::ZERO, |acc, o| acc + o.qty)
+        + resting.iter().fold(Qty::ZERO, |acc, o| acc + o.remaining());
 
     let wall = wall_start.elapsed();
     let p = percentiles(event_ns).unwrap_or(quantis_core::stats::Percentiles {
@@ -382,5 +407,47 @@ mod tests {
         assert!([Qty::ZERO, q, -q].contains(&summary.account.end_position));
         assert!(summary.account.fees.raw() > 0);
         assert!(summary.account.max_drawdown.raw() >= 0);
+    }
+
+    #[test]
+    fn maker_strategy_fills_only_via_the_maker_path() {
+        use crate::strategy::PassiveMaker;
+        let events = synthetic_events(11, 8_000);
+
+        // Charge a taker fee but ZERO maker fee. If the maker strategy's fills
+        // came through the taker path, fees would be > 0; that they are exactly
+        // zero proves every fill was a resting (maker) fill via the queue model.
+        let p = EngineParams {
+            fill: FillParams {
+                taker_fee_ppm: 450,
+                maker_fee_ppm: 0,
+            },
+            latency_ms: 0,
+            ..params()
+        };
+        let mut maker = PassiveMaker::new("0.01".parse().unwrap());
+        let summary = run(events.clone().into_iter(), &mut maker, &p);
+
+        assert!(summary.account.fills > 0, "maker should get queue fills");
+        assert_eq!(
+            summary.account.fees,
+            Cash::ZERO,
+            "fills must be maker, not taker"
+        );
+
+        // With a positive maker fee, the same run now pays fees.
+        let p2 = EngineParams {
+            fill: FillParams {
+                taker_fee_ppm: 450,
+                maker_fee_ppm: 150,
+            },
+            ..p
+        };
+        let mut maker2 = PassiveMaker::new("0.01".parse().unwrap());
+        let summary2 = run(events.into_iter(), &mut maker2, &p2);
+        assert!(
+            summary2.account.fees.raw() > 0,
+            "maker fee should now be charged"
+        );
     }
 }
