@@ -16,3 +16,10 @@ thiserror.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "engine"
+harness = false
