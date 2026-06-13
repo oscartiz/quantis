@@ -36,8 +36,8 @@ cannot disagree about fill logic.
 | 0 | Scaffolding, fail-closed config system, CI, secret scanning | ✅ done |
 | 1 | WS ingestion, order book, backtest core, benchmarks, sample data | ✅ done |
 | 2 | PyO3 bindings, feature pipeline, Gaussian HMM vs. BOCPD, purged CV | ✅ done |
-| 3 | Realistic fills (fees, latency, funding), risk layer, DSR/SPA | ⬜ next |
-| 4 | Paper/testnet execution, Prometheus + Grafana, chaos test | ⬜ |
+| 3 | Realistic fills (fees, latency, funding), risk layer, DSR/SPA | ✅ done |
+| 4 | Paper/testnet execution, Prometheus + Grafana, chaos test | ⬜ next |
 | 5 | Research dashboard, docs, one-shot holdout evaluation | ⬜ |
 
 ## Quickstart

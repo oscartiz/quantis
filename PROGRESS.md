@@ -6,8 +6,27 @@
 
 ## Status
 
-- **Current phase:** Phase 2 — PyO3 bindings + research layer + regime models [DONE]
-- **Sub-step:** awaiting go-ahead for Phase 3 (realistic fills + risk + DSR/SPA).
+- **Current phase:** Phase 3 — realistic fills + risk + statistical evaluation [DONE]
+- **Sub-step:** awaiting go-ahead for Phase 4 (paper/testnet execution + observability + chaos).
+
+### Phase 3 — all [DONE]
+- [DONE] Fill model v1: execution latency (orders fill at the first snapshot
+  after `submit+latency`, never the signal snapshot) + funding accrual.
+  Integer-exact; golden hash deliberately bumped (now `5c17d06c…`). ADR-004,
+  which documents the honest latency-resolution ceiling (sub-500ms = no-op).
+- [DONE] `risk` crate: vol-targeting + capped fractional Kelly sizing (advisory,
+  f64) and the integer `RiskGate` (pre-trade veto on position/notional caps,
+  always-allow de-risking, drawdown-tripped latching kill switch). proptest
+  property tests. ADR-005.
+- [DONE] Python `evaluation`: Sharpe/Sortino/maxDD, Probabilistic + Deflated
+  Sharpe, Hansen SPA + White RC via stationary bootstrap, append-only TrialLog.
+  Tests show DSR deflates a lucky winner and SPA separates edge from noise.
+- [DONE] `docs/losing-money.md` with quantified sensitivities (fees ×1/×2/×3 →
+  −2.82/−4.83/−6.84; latency sweep; regime/capacity/overfitting mechanisms).
+
+**Verified end of Phase 3:** 64 Rust tests, 52 Python tests, clippy -D warnings
+clean, mypy strict clean, golden-hash smoke passes (new hash committed).
+Rebuild the extension after Rust changes: `make bindings`.
 
 ### Phase 2 slice plan — all [DONE]
 - [DONE] A — maturin PyO3 bindings; `quantis_backtest::runner` shared by CLI +
@@ -36,21 +55,27 @@ Build extension before pytest: `make bindings` (CI does this in the python job).
 clean, mypy strict clean, golden-hash smoke passes. Cross-language determinism
 holds (Python-driven backtest == CLI hash).
 
-## NEXT ACTION (Phase 3)
+## NEXT ACTION (Phase 4)
 
-On **"CONTINUE"**: begin Phase 3. Build order:
-1. Rust `backtest::fill` v1 → realistic fills: maker/taker already in; add latency
-   injection (submit delay shifts the book the order sees), conservative queue
-   model for resting limit orders, funding accrual. New ADR-004 (fill model).
-   Bump the golden hash deliberately (results change) with explanation.
-2. Rust `risk` crate: vol-targeting + capped fractional Kelly sizing, per-trade
-   stops, portfolio drawdown limit, kill switch, pre-trade veto API (property
-   tests). ADR-005 (risk framework).
-3. Python `evaluation`: Deflated Sharpe Ratio + SPA/Reality-Check over a logged
-   trial history (every research run appends a trial record). Pick SPA vs White's
-   based on trial-log shape.
-4. `docs/losing-money.md` with quantified sensitivities (fees×2, slippage×2,
-   regime-lag sweeps, capacity estimate).
+On **"CONTINUE"**: begin Phase 4 — paper/testnet execution + observability +
+chaos. Build order:
+1. `execution` crate: order state machine with idempotent client order IDs
+   (submit→ack→filled/cancelled/rejected), position tracking. Unit-tested.
+2. Paper gateway: drives live WS data through the SAME `quantis_backtest` fill
+   engine + the `RiskGate`, so paper and backtest share fill + risk logic.
+3. Testnet gateway: Hyperliquid testnet order placement/cancel/reconcile (gated;
+   needs testnet keys via env — verify HL exchange-endpoint signing scheme first).
+4. Reconciliation loop: periodic compare of internal position vs exchange state;
+   surface drift. Idempotent order handling so retries never double-fill.
+5. Observability: `tracing` structured logs + a Prometheus `/metrics` endpoint
+   + committed Grafana dashboard JSON.
+6. Documented chaos test: kill the feed mid-order, show recovery and no phantom
+   positions. `docs/runbook.md` (start/monitor/kill/recover).
+7. Backtest-vs-paper gap report with attributed causes.
+
+Open item for Phase 4 start: verify Hyperliquid's **exchange** (order) endpoint
+signing scheme and testnet base URL against live docs (only the market-data WS
+was verified in Phase 1).
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
