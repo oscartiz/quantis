@@ -6,6 +6,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+quantis-core.workspace = true
+quantis-backtest = { path = "../backtest" }
+quantis-market-data = { path = "../market-data" }
+quantis-risk = { path = "../risk" }
+thiserror.workspace = true
+tracing = "0.1"
 
 [lints]
 workspace = true

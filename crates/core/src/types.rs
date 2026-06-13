@@ -221,6 +221,16 @@ impl Px {
     }
 }
 
+// A price minus a price is a price-denominated delta (e.g. exit - entry), used
+// for PnL. Only subtraction is defined; adding two absolute prices is
+// meaningless and intentionally unavailable.
+impl Sub for Px {
+    type Output = Px;
+    fn sub(self, rhs: Self) -> Self {
+        Px(self.0 - rhs.0)
+    }
+}
+
 impl Cash {
     /// Apply a fee rate expressed in parts-per-million to this (absolute)
     /// amount; result is always non-negative. Integer arithmetic throughout.

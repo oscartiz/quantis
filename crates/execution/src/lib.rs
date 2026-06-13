@@ -1,9 +1,23 @@
-//! Order execution (lands in Phase 4).
+//! Order execution: state machine, paper/testnet gateways, reconciliation.
 //!
-//! Will contain: an order state machine with idempotent client order IDs, a
-//! paper gateway that reuses `quantis-backtest`'s matching engine against live
-//! data, a Hyperliquid **testnet** gateway, position tracking, and a
-//! reconciliation loop against exchange state.
+//! - [`order`]: order identity (idempotent client ids), lifecycle, reports.
+//! - [`manager`]: the order manager — idempotent report application + position.
+//! - [`gateway`]: the [`gateway::OrderGateway`] trait both gateways implement.
+//! - [`paper`]: the paper gateway, which fills against the **same**
+//!   `quantis_backtest` matching engine as the backtester and vets every order
+//!   through the **same** `quantis_risk` gate.
 //!
-//! A mainnet gateway is intentionally absent from this codebase; the config
-//! layer rejects `mode = "mainnet"` with no bypass flag.
+//! A mainnet gateway is intentionally absent; the config layer rejects
+//! `mode = "mainnet"` with no bypass.
+
+pub mod gateway;
+pub mod manager;
+pub mod order;
+pub mod paper;
+
+pub use gateway::{GatewayError, OrderGateway};
+pub use manager::{Applied, OrderManager};
+pub use order::{
+    ClientOrderId, CloidGenerator, ExecReport, Order, OrderKind, OrderRequest, OrderStatus,
+};
+pub use paper::PaperGateway;
