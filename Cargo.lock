@@ -876,6 +876,8 @@ dependencies = [
  "quantis-core",
  "quantis-market-data",
  "quantis-risk",
+ "serde",
+ "serde_json",
  "thiserror",
  "tracing",
 ]

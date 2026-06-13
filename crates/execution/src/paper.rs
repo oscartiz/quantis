@@ -88,6 +88,12 @@ impl PaperGateway {
         &self.manager
     }
 
+    /// The current order book (so a strategy can read the same book the
+    /// gateway fills against).
+    pub fn book(&self) -> &OrderBook {
+        &self.book
+    }
+
     /// Whether the risk kill switch is tripped.
     pub fn is_killed(&self) -> bool {
         self.risk.is_killed()

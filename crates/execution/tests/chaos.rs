@@ -56,7 +56,10 @@ fn feed_kill_and_replay_produces_no_phantom_position() {
     // and our resend logic RE-SUBMITS the in-flight orders (same cloids).
     let resubmit_1 = m.register(market(1, Side::Buy, "0.30")); // duplicate cloid
     let resubmit_2 = m.register(market(2, Side::Buy, "0.20"));
-    assert!(!resubmit_1 && !resubmit_2, "resends must not create new orders");
+    assert!(
+        !resubmit_1 && !resubmit_2,
+        "resends must not create new orders"
+    );
 
     // re-delivered fills with the SAME fill ids must be ignored
     assert_eq!(m.apply(&fill(1, 1001, "0.30", "50000")), Applied::Duplicate);
@@ -65,7 +68,11 @@ fn feed_kill_and_replay_produces_no_phantom_position() {
     assert_eq!(m.apply(&fill(2, 1002, "0.20", "50010")), Applied::Duplicate);
 
     // --- after recovery: position is unchanged, no phantom exposure ---
-    assert_eq!(m.position(), position_before, "phantom position after replay");
+    assert_eq!(
+        m.position(),
+        position_before,
+        "phantom position after replay"
+    );
 
     // a genuinely new fill (post-reconnect) still applies exactly once
     m.register(market(3, Side::Sell, "0.50"));
