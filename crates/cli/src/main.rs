@@ -3,6 +3,7 @@
 //! Phase 1 ships `config validate`, `record`, and `replay`; `backtest` lands
 //! with the engine crate, `trade` (paper/testnet only) in Phase 4.
 
+mod backtest;
 mod record;
 mod replay;
 
@@ -48,8 +49,15 @@ enum Command {
         #[arg(long, short)]
         file: PathBuf,
     },
-    /// Run a backtest defined by a config file (Phase 1, with the engine crate).
-    Backtest,
+    /// Run a backtest from config and emit a hashed results artifact.
+    Backtest {
+        /// Path to the TOML engine config.
+        #[arg(long, short)]
+        config: PathBuf,
+        /// Fail unless the determinism hash equals this value (CI smoke).
+        #[arg(long)]
+        expect_hash: Option<String>,
+    },
     /// Run the paper/testnet trading engine (Phase 4).
     Trade,
 }
@@ -95,7 +103,10 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             out,
         } => record::run(&config, duration_secs, out),
         Command::Replay { file } => replay::run(&file),
-        Command::Backtest => not_yet("backtest", 1),
+        Command::Backtest {
+            config,
+            expect_hash,
+        } => backtest::run_backtest(&config, expect_hash.as_deref()),
         Command::Trade => not_yet("trade", 4),
     }
 }

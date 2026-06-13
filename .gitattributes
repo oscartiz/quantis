@@ -1,0 +1,10 @@
+# The determinism hash in the smoke test is computed over raw file bytes of
+# the config and the sample data. Pin line endings and binary-ness so a
+# checkout on any OS reproduces the same bytes, and therefore the same hash.
+*.qnts binary
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.rs text eol=lf
+*.py text eol=lf
+*.md text eol=lf

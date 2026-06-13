@@ -3,7 +3,7 @@
 PY_DIR := python
 ENGINE_EXAMPLE := config/engine.example.toml
 
-.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo
+.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo smoke bench
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -38,5 +38,12 @@ test-python: ## Python tests
 ci: fmt-check lint test ## Everything CI runs, locally
 	@echo "All CI checks passed."
 
-demo: ## Phase 0: validate the example config end to end (becomes a full seeded backtest + dashboard by Phase 5)
-	cargo run -p quantis-cli -- config validate $(ENGINE_EXAMPLE)
+demo: ## Seeded backtest on the bundled sample data (research dashboard arrives Phase 5)
+	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE)
+
+smoke: ## Deterministic backtest must reproduce the committed golden hash
+	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE) \
+		--expect-hash $$(cat tests/smoke/expected_hash.txt)
+
+bench: ## Criterion benchmarks (book ladders, backtest loop)
+	cargo bench -p quantis-market-data -p quantis-backtest

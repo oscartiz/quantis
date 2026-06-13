@@ -44,14 +44,16 @@ jobs:
       - run: uv run pytest -q
 
   smoke:
-    # Phase 0 placeholder: validates the example config end to end. From
-    # Phase 1 this becomes a seeded, deterministic backtest on the bundled
-    # sample data whose results-artifact hash is asserted, so any change to
-    # fill logic or data handling that alters results fails the build.
-    name: Smoke (deterministic engine check)
+    # Seeded, deterministic backtest on the committed sample data. The
+    # artifact's determinism hash must equal tests/smoke/expected_hash.txt:
+    # any change to fill logic, fixed-point math, config, or data handling
+    # that alters results fails the build until the golden hash is updated
+    # deliberately, in the same commit, with an explanation.
+    name: Smoke (golden-hash backtest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo run -p quantis-cli -- config validate config/engine.example.toml
+      - run: cargo run --release -p quantis-cli -- config validate config/engine.example.toml
+      - run: make smoke

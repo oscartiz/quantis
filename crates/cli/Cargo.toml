@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+quantis-backtest = { version = "0.1.0", path = "../backtest" }
 quantis-core.workspace = true
 quantis-market-data = { path = "../market-data" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
