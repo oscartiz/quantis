@@ -1,0 +1,9 @@
+{
+  "source": "btc-1d-candles.csv:close",
+  "n_total": 1260,
+  "n_research": 1008,
+  "n_holdout": 252,
+  "boundary_index": 1008,
+  "holdout_fraction": 0.2,
+  "holdout_sha256": "d94dc0603d22a17e6253090dd615fd3e39f16d30e44502c3d234dabe5bda75c0"
+}
