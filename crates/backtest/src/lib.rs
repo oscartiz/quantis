@@ -1,6 +1,14 @@
-//! Event-driven backtesting engine (lands in Phase 1; realistic fills Phase 3).
+//! Event-driven backtesting engine.
 //!
-//! Houses the matching/fill engine that is the **single source of truth** for
-//! fills: the paper-trading gateway in `quantis-execution` consumes this same
-//! code, so backtest and paper results can only diverge through data and
-//! latency — never through duplicated fill logic.
+//! - [`fill`]: the matching engine — the **single source of truth** for fill
+//!   logic; the Phase 4 paper gateway consumes this same code.
+//! - [`strategy`]: the strategy trait and the SMA-cross plumbing demo.
+//! - [`engine`]: the event loop tying book, strategy, fills, and accounting.
+//! - [`report`]: seeded, hashed results artifacts.
+//! - [`synthetic`]: deterministic synthetic streams for tests/benches only.
+
+pub mod engine;
+pub mod fill;
+pub mod report;
+pub mod strategy;
+pub mod synthetic;

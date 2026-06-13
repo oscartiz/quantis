@@ -544,6 +544,15 @@ dependencies = [
 [[package]]
 name = "quantis-backtest"
 version = "0.1.0"
+dependencies = [
+ "quantis-core",
+ "quantis-market-data",
+ "rand",
+ "rand_chacha",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "quantis-cli"
@@ -580,6 +589,7 @@ dependencies = [
  "futures-util",
  "quantis-core",
  "rand",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",
@@ -664,6 +674,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",

@@ -89,6 +89,9 @@ const BACKOFF_CAP: Duration = Duration::from_secs(30);
 /// counted, not propagated — the operator's signal is the stats, the logs,
 /// and (Phase 4) the metrics endpoint.
 pub async fn run_feed(config: FeedConfig, tx: mpsc::Sender<MarketEvent>, stats: Arc<FeedStats>) {
+    // rustls 0.23 requires a process-level crypto provider; select ring
+    // explicitly (a second install attempt errors harmlessly).
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let mut attempt: u32 = 0;
     loop {
         match connect_and_stream(&config, &tx, &stats).await {
