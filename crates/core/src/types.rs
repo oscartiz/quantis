@@ -228,6 +228,14 @@ impl Cash {
         let wide = i128::from(self.0.abs()) * i128::from(ppm) / 1_000_000;
         Cash(i64::try_from(wide).expect("fee overflow"))
     }
+
+    /// Apply a signed rate in parts-per-million, preserving this amount's sign
+    /// (and the rate's). Used for funding, where the cash flow direction
+    /// depends on both position side and funding-rate sign.
+    pub fn rate_ppm_signed(self, ppm: i64) -> Cash {
+        let wide = i128::from(self.0) * i128::from(ppm) / 1_000_000;
+        Cash(i64::try_from(wide).expect("funding overflow"))
+    }
 }
 
 /// Which side of the market an order or aggressor is on.

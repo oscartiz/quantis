@@ -41,6 +41,17 @@ initial_cash = "100000"
 # Fee tier in parts-per-million of notional (Hyperliquid base tier).
 taker_fee_ppm = 450 # 0.045%
 maker_fee_ppm = 150 # 0.015%
+# Execution latency: an order submitted on a snapshot fills against the first
+# snapshot at least this many ms later. With ~2 snapshots/s, any positive value
+# pushes execution to the NEXT snapshot — you cannot fill at the price that
+# triggered the signal. Honest limitation: sub-snapshot latency is below this
+# data's resolution (ADR-004).
+latency_ms = 50
+# Funding: a position open across a funding timestamp accrues funding. The
+# 15-minute sample does not span a 1h interval, so the demo shows no funding;
+# it is exercised by unit tests on synthetic multi-interval data.
+funding_interval_ms = 3600000 # 1 hour; 0 disables
+funding_rate_ppm = 100        # 0.01%/interval, signed; positive = longs pay
 
 [backtest.strategy]
 # Plumbing-demo strategy: SMA crossover on the L2 mid-price. It exists to

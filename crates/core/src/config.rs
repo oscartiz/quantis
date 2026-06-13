@@ -122,6 +122,19 @@ pub struct BacktestSection {
     pub taker_fee_ppm: i64,
     /// Maker fee in parts-per-million of notional (150 = 0.015%).
     pub maker_fee_ppm: i64,
+    /// Execution latency in milliseconds: an order submitted on a snapshot
+    /// fills against the first snapshot whose exchange timestamp is at least
+    /// this far ahead. Models that you cannot trade instantaneously on the
+    /// snapshot that triggered the signal (a form of adverse selection). With
+    /// snapshot-cadence data, any positive value pushes execution to the next
+    /// snapshot; see ADR-004.
+    pub latency_ms: i64,
+    /// Funding interval in milliseconds (e.g. 3_600_000 = 1h). `0` disables
+    /// funding. A position open across a funding timestamp accrues funding.
+    pub funding_interval_ms: i64,
+    /// Funding rate per interval, signed parts-per-million of position
+    /// notional. Positive means longs pay shorts (the usual convention).
+    pub funding_rate_ppm: i64,
     /// Strategy under test.
     pub strategy: StrategySection,
 }
@@ -287,6 +300,21 @@ impl EngineConfig {
                 "backtest.initial_cash must be positive".into(),
             ));
         }
+        if self.backtest.latency_ms < 0 {
+            return Err(ConfigError::Invalid(
+                "backtest.latency_ms must be >= 0".into(),
+            ));
+        }
+        if self.backtest.funding_interval_ms < 0 {
+            return Err(ConfigError::Invalid(
+                "backtest.funding_interval_ms must be >= 0 (0 disables funding)".into(),
+            ));
+        }
+        if self.backtest.funding_rate_ppm.abs() > 100_000 {
+            return Err(ConfigError::Invalid(
+                "backtest.funding_rate_ppm magnitude must be <= 100000".into(),
+            ));
+        }
         let strat = &self.backtest.strategy;
         if strat.fast == 0 || strat.fast >= strat.slow {
             return Err(ConfigError::Invalid(format!(
@@ -335,6 +363,9 @@ data_file = "data/sample/btc-sample.qnts"
 initial_cash = "100000"
 taker_fee_ppm = 450
 maker_fee_ppm = 150
+latency_ms = 50
+funding_interval_ms = 3600000
+funding_rate_ppm = 100
 
 [backtest.strategy]
 name = "sma_cross"

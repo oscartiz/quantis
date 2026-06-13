@@ -17,6 +17,9 @@ fn bench_engine(c: &mut Criterion) {
             taker_fee_ppm: 450,
             maker_fee_ppm: 150,
         },
+        latency_ms: 50,
+        funding_interval_ms: 3_600_000,
+        funding_rate_ppm: 100,
     };
     let mut group = c.benchmark_group("backtest_engine");
     group.sample_size(10);

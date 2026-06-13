@@ -91,6 +91,9 @@ pub fn run_from_config(config_path: &Path) -> Result<ResultsArtifact, RunError> 
             taker_fee_ppm: config.backtest.taker_fee_ppm,
             maker_fee_ppm: config.backtest.maker_fee_ppm,
         },
+        latency_ms: config.backtest.latency_ms,
+        funding_interval_ms: config.backtest.funding_interval_ms,
+        funding_rate_ppm: config.backtest.funding_rate_ppm,
     };
 
     // Collect events first so a truncated log aborts the run loudly rather
@@ -161,6 +164,9 @@ data_file = {sample:?}
 initial_cash = "100000"
 taker_fee_ppm = 450
 maker_fee_ppm = 150
+latency_ms = 50
+funding_interval_ms = 3600000
+funding_rate_ppm = 100
 [backtest.strategy]
 name = "sma_cross"
 fast = 120

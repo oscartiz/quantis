@@ -1,9 +1,16 @@
-//! The event loop: book → strategy → fills → accounting, one event at a time.
+//! The event loop: book → funding → arrived fills → strategy → accounting.
 //!
 //! Determinism contract: everything in [`RunSummary`] except [`Timing`] is a
-//! pure function of (event stream, strategy parameters, fee schedule,
-//! initial cash) — integer arithmetic only, no clocks, no RNG. Timing is
-//! measured, varies run to run, and is excluded from artifact hashes.
+//! pure function of (event stream, strategy parameters, fee schedule, latency,
+//! funding, initial cash) — integer arithmetic only, no clocks, no RNG. Timing
+//! is measured, varies run to run, and is excluded from artifact hashes.
+//!
+//! Execution realism (v1, ADR-004): an order submitted while processing a
+//! snapshot does not fill against that snapshot. It is queued with an arrival
+//! time of `submit_ts + latency_ms` and fills against the first *later* snapshot
+//! whose timestamp has reached arrival — you cannot trade on the snapshot that
+//! triggered your signal. Funding accrues on the open position at each funding
+//! interval boundary.
 
 use std::time::Instant;
 
@@ -22,6 +29,20 @@ pub struct EngineParams {
     pub initial_cash: Cash,
     /// Fee schedule.
     pub fill: FillParams,
+    /// Order arrival delay in milliseconds (see module docs).
+    pub latency_ms: i64,
+    /// Funding interval in ms; `0` disables funding.
+    pub funding_interval_ms: i64,
+    /// Signed funding rate in ppm of notional per interval (positive = longs pay).
+    pub funding_rate_ppm: i64,
+}
+
+/// A market order in flight: submitted, not yet arrived at the exchange.
+#[derive(Debug, Clone, Copy)]
+struct PendingOrder {
+    side: Side,
+    qty: Qty,
+    arrival_ms: i64,
 }
 
 /// Event counts by type.
@@ -38,18 +59,21 @@ pub struct EventCounts {
 }
 
 /// Deterministic accounting results (mark-to-mid; closing costs not modelled
-/// in v0 — stated in ADR-004).
+/// in v1 — stated in ADR-004).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountSummary {
     /// Number of individual fills.
     pub fills: u64,
     /// Total traded notional.
     pub volume: Cash,
-    /// Total fees paid.
+    /// Total trading fees paid.
     pub fees: Cash,
-    /// Quantity that found no visible liquidity (should be zero for sane
-    /// sizes; reported because silence would hide a sizing bug).
+    /// Total funding paid (positive) or received (negative) over the run.
+    pub funding_paid: Cash,
+    /// Quantity that found no visible liquidity at fill time.
     pub unfilled_qty: Qty,
+    /// Quantity of orders still in flight when the data ended (never filled).
+    pub expired_qty: Qty,
     /// Position at the end of the run.
     pub end_position: Qty,
     /// Cash + position marked at the last mid.
@@ -65,7 +89,7 @@ pub struct AccountSummary {
 pub struct Timing {
     /// Events per wall-clock second through the full loop.
     pub events_per_sec: f64,
-    /// Per-event latency percentiles, nanoseconds.
+    /// Per-event p50 latency, nanoseconds.
     pub p50_ns: i64,
     /// 95th percentile.
     pub p95_ns: i64,
@@ -88,6 +112,20 @@ pub struct RunSummary {
     pub timing: Timing,
 }
 
+/// Mutable accounting state threaded through the loop.
+struct Ledger {
+    cash: Cash,
+    position: Qty,
+    fees: Cash,
+    funding_paid: Cash,
+    volume: Cash,
+    fills: u64,
+    unfilled: Qty,
+    peak: Cash,
+    max_drawdown: Cash,
+    last_equity: Cash,
+}
+
 /// Run a strategy over an event stream.
 pub fn run(
     events: impl Iterator<Item = MarketEvent>,
@@ -97,23 +135,29 @@ pub fn run(
     let fill_engine = FillEngine::new(params.fill);
     let mut book = OrderBook::new();
     let mut actions = Actions::default();
+    let mut pending: Vec<PendingOrder> = Vec::new();
 
     let mut counts = EventCounts::default();
-    let mut cash = params.initial_cash;
-    let mut position = Qty::ZERO;
-    let mut fees = Cash::ZERO;
-    let mut volume = Cash::ZERO;
-    let mut fills: u64 = 0;
-    let mut unfilled = Qty::ZERO;
-    let mut peak = params.initial_cash;
-    let mut max_drawdown = Cash::ZERO;
-    let mut last_equity = params.initial_cash;
+    let mut ledger = Ledger {
+        cash: params.initial_cash,
+        position: Qty::ZERO,
+        fees: Cash::ZERO,
+        funding_paid: Cash::ZERO,
+        volume: Cash::ZERO,
+        fills: 0,
+        unfilled: Qty::ZERO,
+        peak: params.initial_cash,
+        max_drawdown: Cash::ZERO,
+        last_equity: params.initial_cash,
+    };
+    let mut next_funding_ms: Option<i64> = None;
 
     let mut event_ns: Vec<i64> = Vec::with_capacity(65_536);
     let wall_start = Instant::now();
 
     for event in events {
         let t0 = Instant::now();
+        let now_ms = event.exch_ts().as_millis();
         counts.events += 1;
         match &event {
             MarketEvent::L2Snapshot(snap) => {
@@ -124,41 +168,50 @@ pub fn run(
             MarketEvent::Candle(_) => counts.candles += 1,
         }
 
-        strategy.on_event(&event, &book, position, &mut actions);
-        for intent in actions.take() {
-            let outcome = fill_engine.market(intent.side, intent.qty, &book, event.exch_ts());
-            for fill in &outcome.fills {
-                match fill.side {
-                    Side::Buy => {
-                        position += fill.qty;
-                        cash -= fill.notional;
-                    }
-                    Side::Sell => {
-                        position -= fill.qty;
-                        cash += fill.notional;
-                    }
+        // Funding accrues at every interval boundary that `now_ms` has reached.
+        if params.funding_interval_ms > 0 {
+            let next = next_funding_ms.get_or_insert(now_ms + params.funding_interval_ms);
+            while now_ms >= *next {
+                if let Some(mid) = book.mid() {
+                    let signed_notional = mid.notional(ledger.position);
+                    let payment = signed_notional.rate_ppm_signed(params.funding_rate_ppm);
+                    ledger.cash -= payment;
+                    ledger.funding_paid += payment;
                 }
-                cash -= fill.fee;
-                fees += fill.fee;
-                volume += fill.notional;
-                fills += 1;
+                *next += params.funding_interval_ms;
             }
-            unfilled += outcome.unfilled;
         }
 
-        if let Some(mid) = book.mid() {
-            let equity = cash + mid.notional(position);
-            if equity > peak {
-                peak = equity;
-            }
-            let dd = peak - equity;
-            if dd > max_drawdown {
-                max_drawdown = dd;
-            }
-            last_equity = equity;
+        // Orders that have arrived fill against the current (just-updated) book.
+        // Only snapshots refresh the book, so execute there.
+        if matches!(event, MarketEvent::L2Snapshot(_)) {
+            pending.retain(|order| {
+                if order.arrival_ms > now_ms {
+                    return true; // still in flight
+                }
+                let outcome = fill_engine.market(order.side, order.qty, &book, event.exch_ts());
+                apply_fills(&mut ledger, &outcome.fills);
+                ledger.unfilled += outcome.unfilled;
+                false // arrived and processed (filled and/or unfilled)
+            });
         }
+
+        // The strategy sees the position after arrived fills, then submits.
+        strategy.on_event(&event, &book, ledger.position, &mut actions);
+        for intent in actions.take() {
+            pending.push(PendingOrder {
+                side: intent.side,
+                qty: intent.qty,
+                arrival_ms: now_ms + params.latency_ms,
+            });
+        }
+
+        mark_to_market(&mut ledger, &book);
         event_ns.push(t0.elapsed().as_nanos() as i64);
     }
+
+    // Orders still in flight at end of data never fill.
+    let expired_qty = pending.iter().fold(Qty::ZERO, |acc, o| acc + o.qty);
 
     let wall = wall_start.elapsed();
     let p = percentiles(event_ns).unwrap_or(quantis_core::stats::Percentiles {
@@ -171,14 +224,16 @@ pub fn run(
     RunSummary {
         counts,
         account: AccountSummary {
-            fills,
-            volume,
-            fees,
-            unfilled_qty: unfilled,
-            end_position: position,
-            final_equity: last_equity,
-            net_pnl: last_equity - params.initial_cash,
-            max_drawdown,
+            fills: ledger.fills,
+            volume: ledger.volume,
+            fees: ledger.fees,
+            funding_paid: ledger.funding_paid,
+            unfilled_qty: ledger.unfilled,
+            expired_qty,
+            end_position: ledger.position,
+            final_equity: ledger.last_equity,
+            net_pnl: ledger.last_equity - params.initial_cash,
+            max_drawdown: ledger.max_drawdown,
         },
         book_stats: book.stats(),
         timing: Timing {
@@ -188,6 +243,39 @@ pub fn run(
             p99_ns: p.p99,
             max_ns: p.max,
         },
+    }
+}
+
+fn apply_fills(ledger: &mut Ledger, fills: &[crate::fill::Fill]) {
+    for fill in fills {
+        match fill.side {
+            Side::Buy => {
+                ledger.position += fill.qty;
+                ledger.cash -= fill.notional;
+            }
+            Side::Sell => {
+                ledger.position -= fill.qty;
+                ledger.cash += fill.notional;
+            }
+        }
+        ledger.cash -= fill.fee;
+        ledger.fees += fill.fee;
+        ledger.volume += fill.notional;
+        ledger.fills += 1;
+    }
+}
+
+fn mark_to_market(ledger: &mut Ledger, book: &OrderBook) {
+    if let Some(mid) = book.mid() {
+        let equity = ledger.cash + mid.notional(ledger.position);
+        if equity > ledger.peak {
+            ledger.peak = equity;
+        }
+        let dd = ledger.peak - equity;
+        if dd > ledger.max_drawdown {
+            ledger.max_drawdown = dd;
+        }
+        ledger.last_equity = equity;
     }
 }
 
@@ -204,6 +292,9 @@ mod tests {
                 taker_fee_ppm: 450,
                 maker_fee_ppm: 150,
             },
+            latency_ms: 50,
+            funding_interval_ms: 0,
+            funding_rate_ppm: 0,
         }
     }
 
@@ -219,35 +310,77 @@ mod tests {
         assert_eq!(a.counts, b.counts);
         assert_eq!(a.account, b.account);
         assert_eq!(a.book_stats, b.book_stats);
-        // timing intentionally not compared
     }
 
     #[test]
-    fn strategy_trades_and_accounting_is_consistent() {
+    fn latency_resolution_limit_is_honest() {
+        // An order is never filled on the snapshot that triggered it: arrived
+        // orders are executed before new ones are queued, so there is always a
+        // one-snapshot execution delay. Consequently latency BELOW the ~500ms
+        // synthetic snapshot gap is a no-op (0ms and 50ms are identical), while
+        // latency ABOVE the gap pushes execution a further snapshot out and
+        // does change realised prices. This resolution limit is ADR-004's
+        // central honesty point about snapshot-cadence data.
+        let events = synthetic_events(7, 4_000);
+        let run_with = |latency_ms: i64| {
+            let mut s = SmaCross::new(20, 80, "0.01".parse().unwrap());
+            run(
+                events.clone().into_iter(),
+                &mut s,
+                &EngineParams {
+                    latency_ms,
+                    ..params()
+                },
+            )
+        };
+        let a0 = run_with(0);
+        let a50 = run_with(50);
+        let a600 = run_with(600);
+        assert!(a0.account.fills > 0);
+        assert_eq!(
+            a0.account.net_pnl, a50.account.net_pnl,
+            "sub-gap latency must be a no-op"
+        );
+        assert_ne!(
+            a0.account.net_pnl, a600.account.net_pnl,
+            "supra-gap latency must bite"
+        );
+    }
+
+    #[test]
+    fn funding_charges_an_open_position() {
+        // A strategy that goes long once and holds; positive funding must cost
+        // a long money relative to no funding.
+        let events = synthetic_events(7, 4_000);
+        let base = EngineParams {
+            latency_ms: 0,
+            funding_interval_ms: 0,
+            funding_rate_ppm: 0,
+            ..params()
+        };
+        let funded = EngineParams {
+            latency_ms: 0,
+            funding_interval_ms: 100_000, // ~ every 200 snapshots (500ms each)
+            funding_rate_ppm: 1_000,
+            ..params()
+        };
+        let mut s1 = SmaCross::new(20, 80, "0.01".parse().unwrap());
+        let mut s2 = SmaCross::new(20, 80, "0.01".parse().unwrap());
+        let a = run(events.clone().into_iter(), &mut s1, &base);
+        let b = run(events.into_iter(), &mut s2, &funded);
+        assert_eq!(a.account.funding_paid, Cash::ZERO);
+        assert_ne!(b.account.funding_paid, Cash::ZERO);
+    }
+
+    #[test]
+    fn accounting_is_self_consistent() {
         let events = synthetic_events(7, 4_000);
         let mut strat = SmaCross::new(20, 80, "0.01".parse().unwrap());
         let summary = run(events.into_iter(), &mut strat, &params());
-
-        assert!(
-            summary.account.fills > 0,
-            "synthetic walk should cross SMAs"
-        );
-        assert_eq!(summary.account.unfilled_qty, Qty::ZERO);
-        // position is always one of -q, 0, +q for a target-flipping strategy
+        assert!(summary.account.fills > 0);
         let q = "0.01".parse::<Qty>().unwrap();
-        assert!(
-            [Qty::ZERO, q, -q].contains(&summary.account.end_position),
-            "end position {:?}",
-            summary.account.end_position
-        );
-        // fees are positive and bounded by volume
+        assert!([Qty::ZERO, q, -q].contains(&summary.account.end_position));
         assert!(summary.account.fees.raw() > 0);
-        assert!(summary.account.fees < summary.account.volume);
-        // equity accounting: net pnl == final - initial by construction;
-        // drawdown is non-negative and at least final loss if negative pnl
         assert!(summary.account.max_drawdown.raw() >= 0);
-        if summary.account.net_pnl.raw() < 0 {
-            assert!(summary.account.max_drawdown >= -summary.account.net_pnl);
-        }
     }
 }

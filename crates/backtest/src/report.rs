@@ -70,10 +70,14 @@ pub struct MetricsSection {
     pub fills: u64,
     /// Quantity that found no visible liquidity.
     pub unfilled_qty: String,
+    /// Quantity of orders still in flight at end of data.
+    pub expired_qty: String,
     /// Total traded notional.
     pub volume: String,
-    /// Total fees paid.
+    /// Total trading fees paid.
     pub fees: String,
+    /// Total funding paid (positive) or received (negative).
+    pub funding_paid: String,
     /// Final equity (mark-to-mid).
     pub final_equity: String,
     /// Final equity minus initial cash.
@@ -118,8 +122,10 @@ impl MetricsSection {
             md_trades: s.counts.md_trades,
             fills: s.account.fills,
             unfilled_qty: s.account.unfilled_qty.to_string(),
+            expired_qty: s.account.expired_qty.to_string(),
             volume: s.account.volume.to_string(),
             fees: s.account.fees.to_string(),
+            funding_paid: s.account.funding_paid.to_string(),
             final_equity: s.account.final_equity.to_string(),
             net_pnl: s.account.net_pnl.to_string(),
             max_drawdown: s.account.max_drawdown.to_string(),
@@ -205,6 +211,9 @@ mod tests {
                     taker_fee_ppm: 450,
                     maker_fee_ppm: 150,
                 },
+                latency_ms: 50,
+                funding_interval_ms: 0,
+                funding_rate_ppm: 0,
             },
         );
         DeterministicSection {
