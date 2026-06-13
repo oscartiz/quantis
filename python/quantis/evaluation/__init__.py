@@ -19,4 +19,3 @@ __all__ = [
     "splits_from_config",
     "walk_forward",
 ]
-
