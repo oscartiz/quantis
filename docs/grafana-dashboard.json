@@ -1,0 +1,112 @@
+{
+  "__comment": "Quantis paper/testnet engine dashboard. Import into Grafana with a Prometheus datasource scraping the engine's /metrics (default localhost:9898). See docs/runbook.md.",
+  "title": "Quantis — Trading Engine",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "tags": ["quantis", "trading"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "5s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Equity (USD)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
+      "targets": [
+        { "expr": "quantis_equity_usd", "legendFormat": "equity", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Net position (base units)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "quantis_position_qty", "legendFormat": "position", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Order flow (rate)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(quantis_orders_submitted_total[1m])", "legendFormat": "submitted/s", "refId": "A" },
+        { "expr": "rate(quantis_fills_total[1m])", "legendFormat": "fills/s", "refId": "B" },
+        { "expr": "rate(quantis_orders_rejected_total[1m])", "legendFormat": "rejected/s", "refId": "C" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Orders rejected (cumulative)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ] }
+        }
+      },
+      "targets": [
+        { "expr": "quantis_orders_rejected_total", "refId": "A" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Feed reconnects",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1 },
+            { "color": "red", "value": 5 }
+          ] }
+        }
+      },
+      "targets": [
+        { "expr": "quantis_feed_reconnects_total", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Duplicate reports ignored (idempotency)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "quantis_reports_duplicate_total", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Events processed (rate)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+      "targets": [
+        { "expr": "rate(quantis_feed_events_total[1m])", "legendFormat": "events/s", "refId": "A" }
+      ]
+    }
+  ]
+}
