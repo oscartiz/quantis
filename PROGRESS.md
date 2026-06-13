@@ -97,9 +97,10 @@ holds (Python-driven backtest == CLI hash).
   (`quantis.evaluation.walk_forward`, `scripts/walk_forward_eval.py`). Result:
   pooled OOS Sharpe 0.60 vs hold 0.20, but median window Sharpe 0.00 / 40%
   positive — episodic edge. Strengthened statistical-honesty.md §5.
-- [TODO] A maker strategy to exercise the conservative queue model end to end
-  (the next self-contained, fully-offline item; wires the maker path specified
-  in ADR-004).
+- [DONE] A maker strategy exercising the conservative queue model end to end:
+  `IntentKind::Limit`, `FillEngine::match_resting`, engine resting-order loop,
+  `PassiveMaker`. Proven maker-only via a zero-maker-fee test. Market path /
+  golden hash unchanged. ADR-004 updated.
 - [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
 - [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
 - [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet

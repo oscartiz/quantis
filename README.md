@@ -126,10 +126,12 @@ avoid. Fuller treatment in [docs/losing-money.md](docs/losing-money.md) and
 [docs/scaling.md](docs/scaling.md).
 
 - **Latency and queue position are lower bounds.** The market-data sample is a
-  ~2/s snapshot feed, so sub-500ms latency is below resolution and resting-order
-  queue position is unobservable. The maker fill path is specified
-  (conservative back-of-queue) but not yet exercised by a maker strategy.
-  *Future:* deep-L2/L3 backfill from Hyperliquid's S3 archive or a vendor.
+  ~2/s snapshot feed, so sub-500ms latency is below resolution and true
+  resting-order queue position is unobservable. The maker path *is* built and
+  exercised (conservative back-of-queue + a `PassiveMaker` strategy, ADR-004),
+  but it assumes last-in-queue and does not model cancellation latency or
+  partial-fill queue re-estimation. *Future:* deep-L2/L3 backfill from
+  Hyperliquid's S3 archive or a vendor.
 - **Single asset, single venue, single strategy demonstrated.** The event model
   and risk layer are built multi-asset, but the shown results are BTC-only; the
   portfolio risk aggregate and cross-asset regime research are designed, not
