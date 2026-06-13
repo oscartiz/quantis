@@ -6,6 +6,7 @@
 mod backtest;
 mod record;
 mod replay;
+mod trade;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -58,8 +59,21 @@ enum Command {
         #[arg(long)]
         expect_hash: Option<String>,
     },
-    /// Run the paper/testnet trading engine (Phase 4).
-    Trade,
+    /// Run the paper trading engine (replay or live) with a metrics endpoint.
+    Trade {
+        /// Path to the TOML engine config.
+        #[arg(long, short)]
+        config: PathBuf,
+        /// Replay a recorded event log instead of connecting live (offline demo).
+        #[arg(long)]
+        replay: Option<PathBuf>,
+        /// How long to run when live, in seconds.
+        #[arg(long, default_value_t = 60)]
+        duration_secs: u64,
+        /// Prometheus metrics port (0 disables the endpoint).
+        #[arg(long, default_value_t = 9_898)]
+        metrics_port: u16,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -107,7 +121,12 @@ fn run(cli: Cli) -> anyhow::Result<()> {
             config,
             expect_hash,
         } => backtest::run_backtest(&config, expect_hash.as_deref()),
-        Command::Trade => not_yet("trade", 4),
+        Command::Trade {
+            config,
+            replay,
+            duration_secs,
+            metrics_port,
+        } => trade::run(&config, replay, duration_secs, metrics_port),
     }
 }
 
@@ -128,10 +147,6 @@ fn init_logging(logging: &LoggingSection) {
     }
 }
 
-fn not_yet(command: &str, phase: u8) -> anyhow::Result<()> {
-    anyhow::bail!("`{command}` lands in phase {phase}; see PROGRESS.md for the build order")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,9 +162,8 @@ mod tests {
     }
 
     #[test]
-    fn stub_commands_fail_loudly_with_phase() {
-        let cli = Cli::try_parse_from(["quantis", "trade"]).unwrap();
-        let err = run(cli).unwrap_err();
-        assert!(err.to_string().contains("phase 4"));
+    fn trade_requires_a_config() {
+        // `trade` now needs --config; parsing without it must fail.
+        assert!(Cli::try_parse_from(["quantis", "trade"]).is_err());
     }
 }
