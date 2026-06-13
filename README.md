@@ -42,6 +42,83 @@ risk-reducing regime filter, not a demonstrated edge, and the credibility is in
 the discipline that produced the number — see
 [docs/statistical-honesty.md](docs/statistical-honesty.md).
 
+## How the model behaves across market regimes
+
+To see *what the model actually does*, here are its trades on BTC across
+different kinds of years. Every chart is generated **walk-forward** — the HMM is
+fit only on data *strictly before* each window, then the causal (filtered)
+regime signal trades through it, with no look-ahead. Green shading = the model
+is long (in the market); ▲ / ▼ mark entries and exits. Reproduce with
+`uv run --project python python python/scripts/regime_charts.py`.
+
+| Window | Market type | Strategy | Buy & hold | Sharpe | Trades | In market |
+|---|---|---:|---:|---:|---:|---:|
+| **Holdout test** (Oct 2025–Jun 2026) | bear (the *pre-registered* test) | **+20%** | −48% | +1.34 | 2 | 12% |
+| 2023 | post-bear recovery (strong uptrend) | +14% | +86% | +0.62 | 9 | 18% |
+| 2024 | bull with sharp corrections | +40% | +112% | +0.92 | 13 | 43% |
+| 2025 | blow-off top, then reversal | +3% | −7% | +0.17 | 2 | 13% |
+| 2026 YTD | bear / downtrend | +18% | −28% | +1.48 | 2 | 19% |
+
+### The test: the sealed bear-market holdout
+
+![BTC holdout test](docs/charts/btc-test-holdout.png)
+
+This is the one **pre-registered** test (boundary + hash committed before
+evaluation). BTC fell from ~$120k to ~$60k. The model held **cash through almost
+the entire crash** — it never saw a bull regime to enter — then took two long
+positions near the February 2026 bottom that caught the relief bounces. Result:
+**+20% while buy-and-hold lost 48%.** Exactly what a regime risk-filter should
+do in a downturn, and a clean demonstration that the causal signal carries no
+look-ahead (it entered *after* the bottom formed, not before).
+
+### Exploring different years
+
+| Bull market — gives up most of the upside | Bear/down — its best environment |
+|---|---|
+| ![2024](docs/charts/btc-2024.png) | ![2026](docs/charts/btc-2026-ytd.png) |
+
+- **2023 — recovery (+86% hold, model +14%).** BTC climbed off the 2022 bottom.
+  The model held only 18% of the time and captured a *fraction* of the rally:
+  regime models are **late to a new bull**, because early-uptrend days still
+  look like the prior bear/chop to a freshly-calibrated model. *(In-sample fit —
+  no prior data — and excludes the first ~3 weeks used for feature warmup.)*
+- **2024 — bull with corrections (+112% hold, model +40%).** ETF inflows and the
+  halving drove a volatile rally. The model traded actively (13 round trips, 43%
+  in market) and made a solid +40% — but its in-and-out behavior during every
+  20–30% correction left **most of the upside on the table** (chart, right-hand
+  column above: the blue strategy curve steadily detaches below grey buy-and-hold).
+- **2025 — top then reversal (−7% hold, model +3%).** A choppy, topping year.
+  The model sat out most of it (13% in market) and ended roughly flat — neither
+  hero nor villain, sidestepping the churn.
+- **2026 YTD — bear (−28% hold, model +18%, Sharpe +1.48).** The model at its
+  best: flat through the decline, two well-timed bounce trades, positive return
+  while the market fell.
+
+![2023](docs/charts/btc-2023.png)
+![2025](docs/charts/btc-2025.png)
+
+### What this says about the model
+
+The pattern is consistent and, importantly, *not cherry-picked* — it holds
+across every market type: **this is a drawdown-avoider, not a return-maximizer.**
+It beats buy-and-hold decisively in down and choppy years (holdout, 2025, 2026)
+and trails it badly in up years (2023, 2024), because being long only in
+*confirmed, causal* bull regimes means it is structurally late entering rallies
+and quick to step aside in corrections. Over a full cycle this nets to modest
+*risk-adjusted* outperformance (walk-forward pooled Sharpe **0.60 vs 0.20**),
+earned almost entirely by **not losing in the bad years** — at the cost of
+leaving most bull-market gains behind. Whether that trade-off is attractive
+depends entirely on the mandate: compelling for a drawdown-sensitive book,
+frustrating for anyone trying to capture BTC's upside. The model does exactly
+one thing well — *get out of the way of declines* — and the charts let you see
+it do precisely that, and nothing more.
+
+> Caveats, stated up front: only the holdout is pre-registered; the yearly
+> windows are exploratory (but still causal / no-look-ahead). Daily bars, single
+> asset, a deliberately simple long/flat rule, and the BTC narrative (halving,
+> ETFs) is context I added — the model knew none of it, only returns and
+> volatility.
+
 ## Status — all phases complete
 
 | Phase | Scope | State |
