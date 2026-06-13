@@ -6,8 +6,28 @@
 
 ## Status
 
-- **Current phase:** Phase 1 — Rust data + book + backtest core [DONE]
-- **Sub-step:** awaiting user go-ahead to begin Phase 2 (PyO3 bindings + research).
+- **Current phase:** Phase 2 — PyO3 bindings + research layer + regime models [IN PROGRESS]
+- **Sub-step:** Slice A (bindings + cross-language hash test) [DONE]; building
+  Slice B (config-driven feature pipeline + leakage canary).
+
+### Phase 2 slice plan
+- [DONE] A — maturin PyO3 bindings; `quantis_backtest::runner` shared by CLI +
+  binding; Python-driven backtest reproduces the golden hash (3 cross-lang tests).
+  `read_mid_series` exposes event logs to research (floats at the boundary only).
+- [DONE] B — numpy feature pipeline (config-driven): log_return, realized_vol,
+  sma, momentum, zscore; causal-by-construction; expanding-window-endpoint
+  leakage check; canary test catches 2 deliberately-leaky features (7 tests).
+- [DONE] C — Gaussian HMM (own log-space Baum-Welch EM + Viterbi), 3-state,
+  diagonal covariance, regime_order() resolves label-switching. Validated vs
+  hmmlearn from a SHARED init (the only fair test for a non-convex objective):
+  means agree to 2e-4 (6 tests). `init=` param enables warm-start/oracle compare.
+- [TODO] D — BOCPD (Adams–MacKay, Student-t predictive, constant hazard).
+  Online/causal counterpart to the HMM; the contrast is the ADR-003 thesis.
+- [TODO] E — purged walk-forward + purged k-fold CV with embargo; leakage test.
+- [TODO] F — holdout wall (commit hash, do not touch) + ADR-003.
+
+Python deps so far: runtime numpy/pydantic/PyYAML; dev maturin/hmmlearn(+scipy,
+sklearn)/mypy/ruff/pytest. mypy overrides: quantis_core, scipy.special, hmmlearn.*.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
