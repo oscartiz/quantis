@@ -42,6 +42,16 @@ risk-reducing regime filter, not a demonstrated edge, and the credibility is in
 the discipline that produced the number — see
 [docs/statistical-honesty.md](docs/statistical-honesty.md).
 
+Two later stress tests only sharpen this. Netting in **real Hyperliquid funding**
+(hash-pinned `data/sample/btc-funding.csv`) leaves the low-exposure holdout
+essentially unchanged (**+19.8%**) but trims the broader walk-forward edge
+(pooled Sharpe **0.60 → 0.42**); and running the repo's *own* Deflated-Sharpe +
+SPA over an **18-config search** finds **no edge that survives the
+multiple-testing correction** (best PSR 0.94 → **DSR 0.61**, SPA-vs-cash p 0.44).
+The honest synthesis: an *episodic, regime-specific drawdown filter*, not a
+*general, searchable* alpha. Reproduce with `scripts/evaluate_funding_impact.py`
+and `scripts/regime_search.py`.
+
 ## How the model behaves across market regimes
 
 To see *what the model actually does*, here are its trades on BTC across

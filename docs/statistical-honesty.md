@@ -53,6 +53,38 @@ corrections, computed over a **logged** trial history (not a guessed count):
 - Code: `python/quantis/evaluation/{metrics,multiple_testing,trial_log}.py`
 - Tests: `tests/test_evaluation_stats.py`
 
+### Applied to the real strategy (not just the synthetic demo)
+
+These corrections are only worth shipping if they are turned on the actual
+strategy, where the temptation to over-claim lives.
+`scripts/regime_search.py` does exactly that: it searches **18 regime-model
+configurations** (volatility window × number of states — the genuine knobs),
+evaluates each **out-of-sample within the research partition** (fit on the first
+half, causally evaluate on the second, **net of real funding**), logs every
+trial, and corrects for the search:
+
+| measure | value | reading |
+|---|---|---|
+| best config Sharpe (ann.) | +1.17 | tempting in isolation |
+| PSR vs 0 (uncorrected) | 0.94 | looks borderline-significant |
+| **Deflated Sharpe (18-config search)** | **0.61** | not convincing once you correct for the search |
+| SPA p-value (best beats cash) | 0.44 | absolute edge not significant |
+| SPA p-value (best beats buy & hold) | 1.00 | rejected on this bull-dominated OOS span |
+
+The verdict is **no edge survives the correction**, and that is the honest
+result: an uncorrected PSR of 0.94 would have invited a significance claim that
+the deflation (DSR 0.61) shows is an artifact of trying 18 things. Two caveats
+stated plainly: the SPA-vs-buy-&-hold figure is *regime-dependent* — this OOS
+split lands on a bull span where a long-only-in-bull risk filter is built to
+underperform, so 1.00 is expected, not informative; and DSR is Sharpe-based
+while SPA is mean-based, so the best config beats buy-and-hold on Sharpe (lower
+volatility) yet not on mean return — the "drawdown-avoider, not return-maximizer"
+finding, quantified. None of this contradicts the sealed holdout: the edge is
+*episodic and regime-specific* (it appeared in a bear window), not a *general,
+searchable* alpha — and the project's own machinery says so.
+
+- Reproduce: `uv run --project python python python/scripts/regime_search.py`
+
 ## 4. Survivorship and instrument choice
 
 Stated plainly because it cannot be fully fixed: choosing BTC because it is
@@ -85,6 +117,14 @@ Holdout span: **2025-10-05 → 2026-06-13** (231 evaluated days).
 | time in market | 13% | 100% |
 
 Reproduce: `uv run --project python python python/scripts/evaluate_holdout.py`.
+
+**Net of real funding** (a long-only perp pays funding for every day it holds —
+modelled with the hash-pinned `data/sample/btc-funding.csv`, real Hyperliquid
+rates), the holdout is essentially unchanged: **+19.8%, Sharpe +1.39**. The drag
+is negligible here because the strategy held long only ~30 days, all during
+risk-off bounces where funding was cheap (+0.003%/day vs the +0.040%/day
+all-history mean — a long-only-in-bull filter is structurally long when funding
+is low). Reproduce: `scripts/evaluate_funding_impact.py`.
 
 ### How to read it honestly
 
@@ -125,6 +165,13 @@ the past (`quantis.evaluation.walk_forward`,
 | mean time in market | 24% |
 | pooled OOS (all windows concatenated) | strategy Sharpe **+0.60** vs hold +0.20; return +123% vs +58% |
 
+**Net of real funding** the pooled edge shrinks materially — the walk-forward
+holds 24% of the time, including through the 2024 bull where funding is expensive
+(everyone is long), so the pooled return falls **+123% → +74.5%** and the pooled
+Sharpe **0.60 → 0.42** (still ahead of buy-and-hold's 0.20, but the return margin
+roughly halves). The per-window character is unchanged — median 0.00, 40%
+positive — funding trims the magnitude, not the lumpiness. (`evaluate_funding_impact.py`.)
+
 This is the complete picture, and it is more sobering than the single holdout.
 The *pooled* out-of-sample result is genuinely decent — trading the strategy
 across every window in turn beats buy-and-hold on both Sharpe (0.60 vs 0.20) and
@@ -144,6 +191,15 @@ quantifies fee sensitivity (fees ×1/×2/×3 → −2.82/−4.83/−6.84 on the 
 the latency-resolution ceiling, capacity mechanics, and regime instability. The
 holdout figures above are net of a 5 bps round-trip cost; at 13% time in market
 the cost drag is small, but a higher-turnover variant would erode it.
+
+**Funding** is now modelled with real data, not assumed away: a long-only perp
+pays funding for every day it holds, and the bundled `btc-funding.csv` (26,526
+real Hyperliquid events, 8-hour early / hourly later — cadence taken from the
+timestamps, never assumed) averages **+0.040%/day (~14.5%/yr)** with longs
+paying on **87%** of days. Netting it in leaves the low-exposure holdout almost
+untouched (+19.9% → +19.8%) but cuts the higher-exposure walk-forward pooled
+Sharpe from 0.60 to 0.42 — exactly the kind of cost a close-to-close backtest
+silently omits. `scripts/evaluate_funding_impact.py`.
 
 ## What none of this proves
 

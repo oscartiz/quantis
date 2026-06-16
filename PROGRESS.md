@@ -101,6 +101,20 @@ holds (Python-driven backtest == CLI hash).
   `IntentKind::Limit`, `FillEngine::match_resting`, engine resting-order loop,
   `PassiveMaker`. Proven maker-only via a zero-maker-fee test. Market path /
   golden hash unchanged. ADR-004 updated.
+- [DONE] Funding realism: bundled real HL funding (`data/sample/btc-funding.csv`,
+  26,526 events, hash-pinned, cadence-agnostic daily aggregation in
+  `quantis.data.funding`). Optional `funding_daily` in `causal_regime_returns` /
+  `walk_forward` (default off → committed numbers unchanged). `evaluate_funding_impact.py`:
+  holdout +19.9%→+19.8% (cheap-funding bounces), walk-forward pooled Sharpe
+  0.60→0.42. Tests in `test_funding.py`. statistical-honesty.md §5/§6 updated.
+- [DONE] DSR/SPA run on the *real* strategy (not just synthetic): `regime_search.py`
+  searches 18 configs (vol_window × n_states) OOS-within-research, net of funding;
+  best PSR 0.94 → DSR 0.61, SPA-vs-cash p 0.44 → no edge survives the correction.
+  Added `bull_rank` to `causal_regime_returns` (default 2, backward-compatible).
+  statistical-honesty.md §3 updated.
+- [DONE] `full_history_chart.py` (one consolidated equity-vs-hold chart, in-sample
+  vs sealed-holdout annotated) and `daily_signal.py` (forward LONG/FLAT emitter +
+  frozen-model + append-only track-record log, paper-only).
 - [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
 - [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
 - [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
