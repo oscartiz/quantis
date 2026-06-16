@@ -19,10 +19,14 @@ _CANDLES = _REPO_ROOT / "data" / "sample" / "btc-1d-candles.csv"
 _CFG = {"train_min": 500, "test_window": 120, "step": 150, "seed": 42}
 
 
+def _run(close: np.ndarray) -> WalkForwardResult:
+    return walk_forward_evaluate(close, train_min=500, test_window=120, step=150, seed=42)
+
+
 @pytest.fixture(scope="module")
 def result() -> WalkForwardResult:
     close = load_candles(_CANDLES).close
-    return walk_forward_evaluate(close, **_CFG)
+    return _run(close)
 
 
 def test_produces_multiple_windows_within_bounds(result: WalkForwardResult) -> None:
@@ -35,8 +39,8 @@ def test_produces_multiple_windows_within_bounds(result: WalkForwardResult) -> N
 
 def test_is_deterministic() -> None:
     close = load_candles(_CANDLES).close
-    a = walk_forward_evaluate(close, **_CFG)
-    b = walk_forward_evaluate(close, **_CFG)
+    a = _run(close)
+    b = _run(close)
     assert a.n_windows == b.n_windows
     assert a.pooled_strat_sharpe == b.pooled_strat_sharpe
     assert [w.strat_total_return for w in a.windows] == [w.strat_total_return for w in b.windows]

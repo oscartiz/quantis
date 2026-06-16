@@ -76,12 +76,16 @@ def walk_forward_evaluate(
     cost_bps: float = DEFAULT_COST_BPS,
     vol_window: int = DEFAULT_VOL_WINDOW,
     min_oos: int = 10,
+    funding_daily: Array | None = None,
 ) -> WalkForwardResult:
     """Evaluate the regime strategy walk-forward over ``close``.
 
     At each ``train_end`` (from ``train_min``, stepping by ``step``), the model
     is fit on ``close[:train_end]`` and evaluated on the next ``test_window``
     bars. Returns per-window results and their aggregate distribution.
+
+    ``funding_daily`` (aligned to ``close``), when given, charges a long the
+    real per-day funding cost; ``None`` leaves results gross of funding.
     """
     if train_min <= vol_window + 2:
         raise ValueError("train_min must exceed the feature warmup")
@@ -103,7 +107,10 @@ def walk_forward_evaluate(
         # features are warm at the test boundary; keep only the OOS rows.
         slice_start = max(0, train_end - warmup)
         sliced = close[slice_start:test_end]
-        r = causal_regime_returns(model, sliced, cost_bps=cost_bps, vol_window=vol_window)
+        f_sliced = None if funding_daily is None else funding_daily[slice_start:test_end]
+        r = causal_regime_returns(
+            model, sliced, cost_bps=cost_bps, vol_window=vol_window, funding_daily=f_sliced
+        )
         global_index = slice_start + r.candle_index
         oos = global_index >= train_end
 

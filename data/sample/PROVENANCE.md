@@ -49,6 +49,27 @@ fixed-point math, or data handling that alters results fails the build.
   return-based regime analysis is unaffected; volume-based features on the early
   span would not be, and are not used.
 
+## `btc-funding.csv`
+
+- **Instrument:** BTC perpetual, Hyperliquid mainnet.
+- **Source:** Hyperliquid `info` endpoint, `fundingHistory`, `coin: BTC`,
+  paginated (500/page) over the candle span.
+- **Span:** 2023-05-12 00:00 → 2026-06-13 23:00 UTC (26,526 funding events).
+  BTC perp funding begins 2023-05-12; the 131 earlier (backfilled) candle days
+  have no funding and are treated as zero — funding we do not have is never
+  charged.
+- **Columns:** `time_ms,funding_rate` (the per-event rate as published).
+- **SHA-256:** `928d81cabc95bafacf89aba63040734e2442ecf6aa4ad883722a94203d0b0a30`
+- **Cadence is not assumed.** HL used **8-hour** intervals early and switched to
+  **hourly** later (both visible in the timestamps). The per-day funding cost
+  consumed by the strategy is therefore the *sum of every event's rate within a
+  UTC day*, robust to the cadence change (`quantis.data.funding`).
+- **Why bundled:** the regime strategy is long-only, and a long perp pays
+  funding for every day it holds — absent from the close-to-close return series.
+  Measured: mean **+0.040%/day (~14.5%/yr)**, with longs paying on **87%** of
+  days. `scripts/evaluate_funding_impact.py` re-runs the holdout and walk-forward
+  net of this real cost.
+
 ## Limitations
 
 - 15 minutes is enough to exercise the engine end to end and to support the

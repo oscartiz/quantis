@@ -74,14 +74,26 @@ def causal_regime_returns(
     *,
     cost_bps: float = DEFAULT_COST_BPS,
     vol_window: int = DEFAULT_VOL_WINDOW,
+    funding_daily: Array | None = None,
+    bull_rank: int = _BULL,
 ) -> RegimeReturns:
     """Evaluate the causal strategy on ``close`` under a fixed (already-fit)
-    model. Uses only filtered (causal) regimes, so it contains no look-ahead."""
+    model. Uses only filtered (causal) regimes, so it contains no look-ahead.
+
+    ``funding_daily``, when given, is a per-day funding cost (fraction; positive
+    = a long pays) **aligned to ``close``**. A long position is charged
+    ``funding_daily`` for each day it is held; ``None`` leaves the result gross
+    of funding (the historical default, so committed numbers are unchanged).
+
+    ``bull_rank`` is the regime rank traded long (0=bear … highest=most bullish);
+    it defaults to 2 (the bull state of a 3-state model). For a ``K``-state model
+    the long regime is the top-mean state, ``K - 1``.
+    """
     fm = regime_features(close, vol_window)
     valid = np.flatnonzero(fm.valid)
     x = fm.values[valid]
     filtered = ordered_regimes(model, model.filter_proba(x))
-    target = (filtered == _BULL).astype(np.float64)
+    target = (filtered == bull_rank).astype(np.float64)
 
     # The position at row j is held over the return into candle valid[j]+1, so
     # the final valid row (no next candle) is dropped.
@@ -91,8 +103,10 @@ def causal_regime_returns(
     position = target[:n]
     prev = np.concatenate([[0.0], position[:-1]])
     cost = np.abs(position - prev) * (cost_bps / 10_000.0)
+    # Funding accrues over the held day idx -> idx+1, so it aligns with next_ret.
+    funding = position * funding_daily[idx + 1] if funding_daily is not None else 0.0
     return RegimeReturns(
-        strat=position * next_ret - cost,
+        strat=position * next_ret - cost - funding,
         hold=next_ret,
         position=position,
         candle_index=idx,
