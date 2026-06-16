@@ -34,6 +34,8 @@ import datetime as dt
 import hashlib
 import json
 import sys
+from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +43,10 @@ import numpy as np
 from numpy.typing import NDArray
 
 from quantis.data.candles import load_candles
+from quantis.evaluation.metrics import max_drawdown, sharpe_ratio
 from quantis.evaluation.regime_strategy import (
     _BULL,
+    DEFAULT_COST_BPS,
     DEFAULT_VOL_WINDOW,
     fit_regime_hmm,
     ordered_regimes,
@@ -56,6 +60,7 @@ _CSV = _REPO_ROOT / "data" / "sample" / "btc-1d-candles.csv"
 _FROZEN = _REPO_ROOT / "results" / "frozen-regime-model.json"
 _LOG = _REPO_ROOT / "results" / "daily-signal-log.csv"
 _REGIME_NAMES = {0: "bear", 1: "chop", 2: "bull"}
+_TRADING_DAYS = 365
 
 
 # --- persistence of the frozen model -----------------------------------------
@@ -196,6 +201,84 @@ def _append_log(
         w.writerow([date, f"{close:.2f}", regime, target, action, trained_through])
 
 
+# --- forward track-record review ----------------------------------------------
+
+
+@dataclass(frozen=True)
+class TrackRecord:
+    """Realized forward returns reconstructed from a signal log (>= 2 rows)."""
+
+    dates: list[str]  # the held bars (one per realized return)
+    position: Array  # 1/0 held into each return
+    strat: Array  # realized strategy log returns (net of cost)
+    hold: Array  # buy-and-hold log returns over the same bars
+    n_trades: int  # entries (FLAT -> LONG transitions)
+    gaps: int  # non-consecutive-day gaps in the log
+
+    @property
+    def strat_return(self) -> float:
+        return float(np.exp(np.sum(self.strat)) - 1.0)
+
+    @property
+    def hold_return(self) -> float:
+        return float(np.exp(np.sum(self.hold)) - 1.0)
+
+
+def compute_track_record(rows: list[dict[str, str]]) -> TrackRecord | None:
+    """Reconstruct realized returns from logged rows, reusing the repo's exact
+    conventions: the position decided on a bar is held into the NEXT bar, returns
+    are close-to-close logs, and a ``DEFAULT_COST_BPS`` cost is charged on each
+    position change. Returns ``None`` if there are fewer than 2 rows.
+    """
+    if len(rows) < 2:
+        return None
+    dates = [r["date"] for r in rows]
+    close = np.array([float(r["close"]) for r in rows], dtype=np.float64)
+    target = np.array([1.0 if r["target"] == "LONG" else 0.0 for r in rows], dtype=np.float64)
+
+    # Position on row i is held over the return into row i+1; the final row has
+    # no next close and is dropped (matches causal_regime_returns).
+    pos = target[:-1]
+    next_ret = np.log(close[1:] / close[:-1])
+    prev = np.concatenate([[0.0], pos[:-1]])
+    cost = np.abs(pos - prev) * (DEFAULT_COST_BPS / 10_000.0)
+    n_trades = int(np.sum(np.diff(np.concatenate([[0.0], pos])) > 0))
+    gaps = sum(
+        1
+        for a, b in pairwise(dates)
+        if (dt.date.fromisoformat(b) - dt.date.fromisoformat(a)).days != 1
+    )
+    return TrackRecord(dates[:-1], pos, pos * next_ret - cost, next_ret, n_trades, gaps)
+
+
+def review(log_path: Path) -> None:
+    """Print the realized forward track record from the signal log — how the
+    N=1 holdout slowly becomes a real out-of-sample distribution."""
+    if not log_path.exists():
+        raise SystemExit(f"no signal log at {log_path}; run `signal` over several days first.")
+    rows = list(csv.DictReader(log_path.open(encoding="utf-8")))
+    tr = compute_track_record(rows)
+    if tr is None:
+        print(f"track record: {len(rows)} day(s) logged — need >= 2 days to realize a return.")
+        return
+
+    span = f"{tr.dates[0]} -> {tr.dates[-1]}, {len(tr.strat)} held days"
+    print(f"=== FORWARD TRACK RECORD ({span}) ===")
+    print(
+        f"  strategy:   {tr.strat_return * 100:+.1f}%   "
+        f"Sharpe {sharpe_ratio(tr.strat, _TRADING_DAYS):+.2f}   "
+        f"maxDD {max_drawdown(tr.strat) * 100:.1f}%   "
+        f"{np.mean(tr.position) * 100:.0f}% in market   {tr.n_trades} trades"
+    )
+    print(
+        f"  buy & hold: {tr.hold_return * 100:+.1f}%   "
+        f"Sharpe {sharpe_ratio(tr.hold, _TRADING_DAYS):+.2f}   "
+        f"maxDD {max_drawdown(tr.hold) * 100:.1f}%"
+    )
+    if tr.gaps:
+        print(f"  note: {tr.gaps} non-consecutive-day gap(s) — some returns span >1 day.")
+
+
 # --- optional notification seam (stdlib only) --------------------------------
 
 
@@ -221,10 +304,14 @@ def main() -> int:
     sub.add_parser("freeze", help="fit the HMM on all history and persist frozen params")
     sp = sub.add_parser("signal", help="score the latest bar and emit LONG/FLAT")
     sp.add_argument("--notify", action="store_true", help="POST to QUANTIS_SIGNAL_WEBHOOK if set")
+    rp = sub.add_parser("review", help="report the realized forward track record from the log")
+    rp.add_argument("--log", type=Path, default=_LOG, help="signal log CSV to review")
     args = ap.parse_args()
 
     if args.cmd == "freeze":
         freeze(_CSV, _FROZEN)
+    elif args.cmd == "review":
+        review(args.log)
     else:
         emit(_CSV, _FROZEN, _LOG, notify=args.notify)
     return 0
