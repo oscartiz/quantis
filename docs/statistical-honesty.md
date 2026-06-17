@@ -111,6 +111,28 @@ strawman. See ADR-007.
 
 - Reproduce: `uv run --project python python python/scripts/ensemble_eval.py`
 
+### And to *position sizing* (ADR-008)
+
+Replacing the binary long/flat book with a volatility-targeted, conviction-
+weighted equity weight (a causal port of the risk crate's sizer) is held to the
+same bar. `scripts/sizing_eval.py` sweeps target-vol × leverage × {hard,
+conviction} — **12 variants**, OOS-within-research, net of funding.
+
+| measure | value | reading |
+|---|---|---|
+| best variant Sharpe (ann.) | +0.49 (vs binary +0.32) | conviction weighting drives it, not vol targeting |
+| **Deflated Sharpe (12 variants)** | **0.645** | the lift is within what 12 tries buys |
+| SPA p-value (best beats cash) | 0.256 | absolute edge not significant |
+| SPA p-value (best beats binary book) | 0.246 | sizing does not beat the book it sizes |
+
+The honest nuance worth keeping: walk-forward shows sizing genuinely improves OOS
+*consistency* — median window Sharpe 0.13 → 0.70 and 50% → 79% of windows
+positive, at slightly lower exposure — yet **no edge survives the single-split
+correction**. A real risk-shaping improvement that the deflation still won't let
+us call searchable alpha. See ADR-008.
+
+- Reproduce: `uv run --project python python python/scripts/sizing_eval.py`
+
 ## 4. Survivorship and instrument choice
 
 Stated plainly because it cannot be fully fixed: choosing BTC because it is

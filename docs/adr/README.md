@@ -13,3 +13,4 @@ their status changes to `superseded by ADR-NNN`.
 | [005](ADR-005-risk-framework.md) | Risk framework (sizing + the pre-trade gate) | accepted |
 | [006](ADR-006-execution-and-gateways.md) | Execution gateways + the testnet signing seam | accepted |
 | [007](ADR-007-hmm-bocpd-ensemble.md) | HMM + BOCPD ensemble (BOCPD as a causal risk-off overlay) | accepted |
+| [008](ADR-008-research-position-sizing.md) | Research position sizing (vol targeting + conviction) | accepted |

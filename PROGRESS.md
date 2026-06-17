@@ -125,6 +125,15 @@ holds (Python-driven backtest == CLI hash).
   single split, but over a 9-variant search **no edge survives** (DSR 0.68,
   SPA-vs-HMM p 0.36) — a risk-shaper, not searchable alpha. README + statistical-
   honesty.md §3 updated; `test_ensemble.py` (6 tests). Python suite now 78 green.
+- [DONE] Research position sizing: causal port of the risk crate's vol-target
+  sizer into the research path (`quantis.evaluation.sizing_strategy`; ADR-008),
+  with optional conviction (`P(bull)`) weighting. `target_vol=None` provably
+  recovers the binary book (tested); weight = `clamp(target_vol/realized_vol, 0,
+  max_leverage)` matches `crate::risk::vol_target_qty`. `scripts/sizing_eval.py`:
+  conviction sizing lifts single-split Sharpe +0.32→+0.49 and walk-forward median
+  window Sharpe 0.13→0.70 / positive windows 50%→79% (consistency), but over a
+  12-variant search **no edge survives** (DSR 0.65, SPA-vs-binary p 0.25). README
+  + honesty §3 updated; `test_sizing.py` (7 tests). Python suite now 85 green.
 - [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
 - [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
 - [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
@@ -143,9 +152,10 @@ offline, BTC-only* enhancement that makes this a more powerful research tool, ru
 it through the existing honesty harness (walk-forward + DSR/SPA, net of funding),
 and document it (ADR + statistical-honesty.md + README). Candidates: a third
 causal regime model in the ADR-003 family (e.g. MS-GARCH) compared honestly;
-richer causal feature families fed through the leakage canary; or position-sizing
-research (wire the Rust risk crate's vol-targeting/Kelly into the research
-strategy). Otherwise: name a follow-up above or a new direction.
+richer causal feature families fed through the leakage canary; or capped
+fractional Kelly sizing (the risk crate's other sizer — vol-targeting is now
+ported in ADR-008, Kelly is the natural next sizer). Otherwise: name a follow-up
+above or a new direction.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 

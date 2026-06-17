@@ -60,6 +60,16 @@ across a 9-variant search it too shows **no edge that survives deflation** (DSR
 0.68, SPA-vs-HMM p 0.36): the overlay reshapes risk, exactly as designed, without
 adding searchable alpha. Reproduce with `scripts/ensemble_eval.py`.
 
+Sizing the position tells the same story with a twist. Swapping the binary
+long/flat book for a volatility-targeted, conviction-weighted weight — a causal
+port of the risk crate's own sizer ([ADR-008](docs/adr/ADR-008-research-position-sizing.md))
+— markedly improves out-of-sample *consistency* (walk-forward median window Sharpe
+**0.13 → 0.70**, positive windows **50% → 79%**, at lower exposure), driven by
+*conviction* weighting rather than vol targeting alone. Yet across a 12-variant
+search it still shows **no edge that survives deflation** (DSR 0.65, SPA-vs-binary
+p 0.25): a genuine risk-shaping gain, not searchable alpha. Reproduce with
+`scripts/sizing_eval.py`.
+
 ## How the model behaves across market regimes
 
 To see *what the model actually does*, here are its trades on BTC across
@@ -239,9 +249,10 @@ avoid. Fuller treatment in [docs/losing-money.md](docs/losing-money.md) and
   honestly as such — not an edge. A walk-forward refit across many windows is
   the next rigorous step.
 - **The demo strategies are not alpha.** The SMA-cross (execution demo), the HMM
-  regime filter, and the HMM+BOCPD risk-off overlay (research demos) all exist to
-  exercise the machinery; none is presented as a money-maker, and each is reported
-  next to the multiple-testing correction that shows so.
+  regime filter, the HMM+BOCPD risk-off overlay, and the vol-targeted/conviction
+  sizing layer (research demos) all exist to exercise the machinery; none is
+  presented as a money-maker, and each is reported next to the multiple-testing
+  correction that shows so.
 
 ## License
 
