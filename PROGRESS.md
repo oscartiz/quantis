@@ -115,6 +115,16 @@ holds (Python-driven backtest == CLI hash).
 - [DONE] `full_history_chart.py` (one consolidated equity-vs-hold chart, in-sample
   vs sealed-holdout annotated) and `daily_signal.py` (forward LONG/FLAT emitter +
   frozen-model + append-only track-record log, paper-only).
+- [DONE] HMM+BOCPD ensemble: BOCPD (built in Phase 2, previously unused as a
+  *signal*) wired in as a one-directional **causal risk-off overlay** on the HMM
+  filter (`quantis.evaluation.ensemble_strategy`; ADR-007). Overlay can only turn
+  long→flat (tested invariant), causality re-asserted via prefix tests, and
+  `walk_forward_evaluate` made strategy-generic (`returns_fn=`, default unchanged
+  so committed numbers hold). `scripts/ensemble_eval.py` runs the honest study:
+  best overlay cuts holdout-half max-DD 20.9%→13.7% (Sharpe +0.32→+0.53) on the
+  single split, but over a 9-variant search **no edge survives** (DSR 0.68,
+  SPA-vs-HMM p 0.36) — a risk-shaper, not searchable alpha. README + statistical-
+  honesty.md §3 updated; `test_ensemble.py` (6 tests). Python suite now 78 green.
 - [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
 - [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
 - [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
@@ -122,11 +132,20 @@ holds (Python-driven backtest == CLI hash).
 
 ## NEXT ACTION
 
-On **"CONTINUE"** with no new instruction: implement a **maker (limit-order)
-strategy** and wire the conservative back-of-queue fill model (ADR-004) into the
-backtest engine + paper gateway, with tests, so the maker path is exercised end
-to end rather than only specified. This is the highest-value fully-offline item
-left. Otherwise: name a follow-up above or a new direction.
+The maker path and the HMM+BOCPD ensemble (the two highest-value fully-offline
+items) are both **DONE**. The project is BTC-only by standing decision (user,
+2026-06-16): do **not** pursue multi-asset. Remaining items are externally
+blocked: deep-L2/L3 backfill needs the HL S3 archive, and the testnet
+`ActionSigner` needs operator keys.
+
+On **"CONTINUE"** with no new instruction: pick the next highest-value *fully
+offline, BTC-only* enhancement that makes this a more powerful research tool, run
+it through the existing honesty harness (walk-forward + DSR/SPA, net of funding),
+and document it (ADR + statistical-honesty.md + README). Candidates: a third
+causal regime model in the ADR-003 family (e.g. MS-GARCH) compared honestly;
+richer causal feature families fed through the leakage canary; or position-sizing
+research (wire the Rust risk crate's vol-targeting/Kelly into the research
+strategy). Otherwise: name a follow-up above or a new direction.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 

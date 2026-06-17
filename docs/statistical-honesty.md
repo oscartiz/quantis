@@ -85,6 +85,32 @@ searchable* alpha — and the project's own machinery says so.
 
 - Reproduce: `uv run --project python python python/scripts/regime_search.py`
 
+### The same discipline applied to the *ensemble* (ADR-007)
+
+The temptation to over-claim is strongest with a *new* idea, so the BOCPD
+risk-off overlay (a fast, causal changepoint exit layered on the HMM filter) is
+held to exactly the same bar. `scripts/ensemble_eval.py` sweeps the overlay's two
+knobs — hazard × confirmation bars, **9 variants** — OOS-within-research and net
+of funding, then deflates.
+
+| measure | value | reading |
+|---|---|---|
+| best overlay Sharpe (ann.) | +0.53 (vs HMM +0.32) | tempting: also cuts max-DD 20.9% → 13.7% |
+| PSR vs 0 (uncorrected) | 0.738 | unconvincing even before deflation |
+| **Deflated Sharpe (9 variants)** | **0.682** | the lift is within what 9 tries buys you |
+| SPA p-value (best beats cash) | 0.268 | absolute edge not significant |
+| SPA p-value (best beats plain HMM) | 0.356 | does not beat the HMM it overlays |
+
+The overlay measurably trims drawdown and exposure — which is exactly its
+mechanical job — and walk-forward confirms a small, consistent *risk* reduction
+(pooled Sharpe 0.25 → 0.31, mean window max-DD 0.09 → 0.08). But **no edge
+survives the correction**: a plausible single-split win evaporates once the
+machinery accounts for the search. This is the honest payoff of building the
+correction first — it disciplines the project's own new ideas, not just a
+strawman. See ADR-007.
+
+- Reproduce: `uv run --project python python python/scripts/ensemble_eval.py`
+
 ## 4. Survivorship and instrument choice
 
 Stated plainly because it cannot be fully fixed: choosing BTC because it is

@@ -52,6 +52,14 @@ The honest synthesis: an *episodic, regime-specific drawdown filter*, not a
 *general, searchable* alpha. Reproduce with `scripts/evaluate_funding_impact.py`
 and `scripts/regime_search.py`.
 
+The same discipline disciplines the project's *own* new ideas. Putting the repo's
+second regime model to work — BOCPD as a fast, causal risk-off overlay on the HMM
+filter ([ADR-007](docs/adr/ADR-007-hmm-bocpd-ensemble.md)) — measurably trims
+drawdown on a single split (max-DD 20.9% → 13.7%, Sharpe +0.32 → +0.53), but
+across a 9-variant search it too shows **no edge that survives deflation** (DSR
+0.68, SPA-vs-HMM p 0.36): the overlay reshapes risk, exactly as designed, without
+adding searchable alpha. Reproduce with `scripts/ensemble_eval.py`.
+
 ## How the model behaves across market regimes
 
 To see *what the model actually does*, here are its trades on BTC across
@@ -230,9 +238,10 @@ avoid. Fuller treatment in [docs/losing-money.md](docs/losing-money.md) and
 - **The holdout is N = 1.** One favourable 8-month bear window is reported
   honestly as such — not an edge. A walk-forward refit across many windows is
   the next rigorous step.
-- **The demo strategy is not alpha.** Both the SMA-cross (execution demo) and
-  the regime filter (research demo) exist to exercise the machinery; neither is
-  presented as a money-maker.
+- **The demo strategies are not alpha.** The SMA-cross (execution demo), the HMM
+  regime filter, and the HMM+BOCPD risk-off overlay (research demos) all exist to
+  exercise the machinery; none is presented as a money-maker, and each is reported
+  next to the multiple-testing correction that shows so.
 
 ## License
 

@@ -16,6 +16,7 @@ off to the training span.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -25,11 +26,19 @@ from quantis.evaluation.metrics import max_drawdown, sharpe_ratio
 from quantis.evaluation.regime_strategy import (
     DEFAULT_COST_BPS,
     DEFAULT_VOL_WINDOW,
+    RegimeReturns,
     causal_regime_returns,
     fit_regime_hmm,
 )
 
 Array = NDArray[np.float64]
+
+# A causal strategy evaluator: ``(model, close, *, cost_bps, vol_window,
+# funding_daily) -> RegimeReturns``. The HMM filter is the default; the
+# HMM+BOCPD overlay (quantis.evaluation.ensemble_strategy) is a drop-in via
+# functools.partial (binding its extra knobs). This lets the harness turn *any*
+# causal strategy's N=1 holdout into a distribution, not just the HMM.
+ReturnsFn = Callable[..., RegimeReturns]
 
 
 @dataclass(frozen=True)
@@ -77,15 +86,22 @@ def walk_forward_evaluate(
     vol_window: int = DEFAULT_VOL_WINDOW,
     min_oos: int = 10,
     funding_daily: Array | None = None,
+    returns_fn: ReturnsFn = causal_regime_returns,
 ) -> WalkForwardResult:
-    """Evaluate the regime strategy walk-forward over ``close``.
+    """Evaluate a causal regime strategy walk-forward over ``close``.
 
-    At each ``train_end`` (from ``train_min``, stepping by ``step``), the model
-    is fit on ``close[:train_end]`` and evaluated on the next ``test_window``
-    bars. Returns per-window results and their aggregate distribution.
+    At each ``train_end`` (from ``train_min``, stepping by ``step``), the HMM is
+    fit on ``close[:train_end]`` and the strategy evaluated on the next
+    ``test_window`` bars. Returns per-window results and their aggregate
+    distribution.
 
     ``funding_daily`` (aligned to ``close``), when given, charges a long the
     real per-day funding cost; ``None`` leaves results gross of funding.
+
+    ``returns_fn`` is the causal strategy evaluator (default: the HMM filter).
+    Pass ``functools.partial(causal_ensemble_returns, hazard_lambda=..., ...)``
+    to walk the HMM+BOCPD overlay through the identical harness; both see the
+    same per-window slice, so the comparison is apples-to-apples.
     """
     if train_min <= vol_window + 2:
         raise ValueError("train_min must exceed the feature warmup")
@@ -108,7 +124,7 @@ def walk_forward_evaluate(
         slice_start = max(0, train_end - warmup)
         sliced = close[slice_start:test_end]
         f_sliced = None if funding_daily is None else funding_daily[slice_start:test_end]
-        r = causal_regime_returns(
+        r = returns_fn(
             model, sliced, cost_bps=cost_bps, vol_window=vol_window, funding_daily=f_sliced
         )
         global_index = slice_start + r.candle_index
