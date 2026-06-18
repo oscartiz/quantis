@@ -3,7 +3,7 @@
 PY_DIR := python
 ENGINE_EXAMPLE := config/engine.example.toml
 
-.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo smoke bench bindings
+.PHONY: help setup fmt fmt-check lint test test-rust test-python ci demo smoke bench bindings research
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
@@ -46,6 +46,14 @@ demo: ## Seeded backtest on the bundled sample + render the research dashboard (
 	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE)
 	cd $(PY_DIR) && uv run python scripts/render_dashboard.py
 	@echo "Open results/dashboard.html in a browser."
+
+research: ## Run all honest research studies + render the consolidated report (offline)
+	cd $(PY_DIR) && uv run python scripts/regime_search.py
+	cd $(PY_DIR) && uv run python scripts/ensemble_eval.py
+	cd $(PY_DIR) && uv run python scripts/sizing_eval.py
+	cd $(PY_DIR) && uv run python scripts/short_eval.py
+	cd $(PY_DIR) && uv run python scripts/research_report.py
+	@echo "Open results/research-report.html in a browser."
 
 smoke: ## Deterministic backtest must reproduce the committed golden hash
 	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE) \

@@ -14,3 +14,5 @@ their status changes to `superseded by ADR-NNN`.
 | [006](ADR-006-execution-and-gateways.md) | Execution gateways + the testnet signing seam | accepted |
 | [007](ADR-007-hmm-bocpd-ensemble.md) | HMM + BOCPD ensemble (BOCPD as a causal risk-off overlay) | accepted |
 | [008](ADR-008-research-position-sizing.md) | Research position sizing (vol targeting + conviction) | accepted |
+| [009](ADR-009-overfitting-diagnostics.md) | Overfitting diagnostics (CSCV/PBO + global trial correction) | accepted |
+| [010](ADR-010-long-short-regime-trading.md) | Long/short regime trading (shorting the bear) | accepted |

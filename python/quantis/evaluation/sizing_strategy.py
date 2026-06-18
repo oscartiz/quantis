@@ -67,6 +67,37 @@ DEFAULT_TARGET_VOL = 0.02
 # Hard cap on the equity weight, mirroring the risk crate's leverage cap so a
 # collapsing volatility estimate cannot demand an unbounded position.
 DEFAULT_MAX_LEVERAGE = 3.0
+# Fraction of full Kelly (full Kelly is famously too aggressive under parameter
+# uncertainty — ADR-005) and the hard leverage cap on the Kelly weight.
+DEFAULT_KELLY_FRACTION = 0.25
+DEFAULT_KELLY_CAP = 3.0
+
+
+def _weighted_returns(
+    close: Array,
+    valid: NDArray[np.int64],
+    weight: Array,
+    *,
+    cost_bps: float,
+    funding_daily: Array | None,
+) -> RegimeReturns:
+    """Turn a causal per-row equity weight into a RegimeReturns, charging cost on
+    turnover ``|Δw|`` and funding on the held weight. Shared by every sizer here
+    so the accounting is defined once. The weight at row j is held over the
+    return into candle valid[j]+1, so the final valid row is dropped."""
+    n = len(valid) - 1 if valid[-1] + 1 >= len(close) else len(valid)
+    idx = valid[:n]
+    next_ret = np.log(close[idx + 1] / close[idx])
+    position = weight[:n]
+    prev = np.concatenate([[0.0], position[:-1]])
+    cost = np.abs(position - prev) * (cost_bps / 10_000.0)
+    funding = position * funding_daily[idx + 1] if funding_daily is not None else 0.0
+    return RegimeReturns(
+        strat=position * next_ret - cost - funding,
+        hold=next_ret,
+        position=position,
+        candle_index=idx,
+    )
 
 
 def causal_position_weight(
@@ -144,19 +175,56 @@ def causal_sized_returns(
         bull_rank=bull_rank,
         conviction_weighted=conviction_weighted,
     )
+    return _weighted_returns(close, valid, weight, cost_bps=cost_bps, funding_daily=funding_daily)
 
-    # The weight at row j is held over the return into candle valid[j]+1, so the
-    # final valid row (no next candle) is dropped — identical to the HMM path.
-    n = len(valid) - 1 if valid[-1] + 1 >= len(close) else len(valid)
-    idx = valid[:n]
-    next_ret = np.log(close[idx + 1] / close[idx])
-    position = weight[:n]
-    prev = np.concatenate([[0.0], position[:-1]])
-    cost = np.abs(position - prev) * (cost_bps / 10_000.0)
-    funding = position * funding_daily[idx + 1] if funding_daily is not None else 0.0
-    return RegimeReturns(
-        strat=position * next_ret - cost - funding,
-        hold=next_ret,
-        position=position,
-        candle_index=idx,
+
+def causal_kelly_weight(
+    model: GaussianHMM,
+    close: Array,
+    *,
+    fraction: float = DEFAULT_KELLY_FRACTION,
+    cap: float = DEFAULT_KELLY_CAP,
+    vol_window: int = DEFAULT_VOL_WINDOW,
+) -> tuple[Array, NDArray[np.int64]]:
+    """Capped fractional Kelly equity weight per warmed row, and its close indices.
+
+    The risk crate's ``capped_fractional_kelly`` (ADR-005) is ``clamp(fraction ·
+    edge/variance, ±cap)``. Here the **edge** is the model's own causal expected
+    next-bar return — ``filter_proba(x) @ means[:, 0]`` under the fixed fitted
+    HMM — and the **variance** is ``realized_vol**2``. No separate bull gate is
+    needed: in bear/chop the expected return is ~0 or negative, so the long-only
+    floor (clamp at 0) takes the weight to cash on its own. Causal because both
+    the filtered posterior and ``realized_vol`` at ``t`` use only data through
+    ``t`` (prefix-invariance asserted in ``tests/test_sizing.py``).
+    """
+    close = np.asarray(close, dtype=np.float64)
+    fm = regime_features(close, vol_window)
+    valid = np.flatnonzero(fm.valid)
+    x = fm.values[valid]
+    edge = model.filter_proba(x) @ model.means[:, 0]  # expected next-bar return
+    variance = realized_vol(close, window=vol_window)[valid] ** 2
+    with np.errstate(invalid="ignore", divide="ignore"):
+        raw = np.where(variance > 0.0, fraction * edge / variance, 0.0)
+    weight: Array = np.clip(raw, 0.0, cap)  # long-only: clamp at the floor, not -cap
+    return weight, valid
+
+
+def causal_kelly_returns(
+    model: GaussianHMM,
+    close: Array,
+    *,
+    cost_bps: float = DEFAULT_COST_BPS,
+    vol_window: int = DEFAULT_VOL_WINDOW,
+    funding_daily: Array | None = None,
+    fraction: float = DEFAULT_KELLY_FRACTION,
+    cap: float = DEFAULT_KELLY_CAP,
+) -> RegimeReturns:
+    """Causal regime strategy sized by capped fractional Kelly (long-only).
+
+    Drop-in compatible with the walk-forward harness (extra knobs default). See
+    :func:`causal_kelly_weight` for the sizing and its causality argument."""
+    close = np.asarray(close, dtype=np.float64)
+    weight, valid = causal_kelly_weight(
+        model, close, fraction=fraction, cap=cap, vol_window=vol_window
     )
+    return _weighted_returns(close, valid, weight, cost_bps=cost_bps, funding_daily=funding_daily)

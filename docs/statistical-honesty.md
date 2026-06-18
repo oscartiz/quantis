@@ -133,6 +133,51 @@ us call searchable alpha. See ADR-008.
 
 - Reproduce: `uv run --project python python python/scripts/sizing_eval.py`
 
+### And to *shorting the bear regime* (ADR-010)
+
+The long-only book only sidesteps bear regimes; the symmetric experiment is to
+*short* them — and a short **receives** funding when the rate is positive, so it
+carries a structural tailwind. `scripts/short_eval.py` searches 9 HMM configs of
+the long/short book against the long/flat one, net of funding. The tailwind does
+not save it: shorting beats long/flat on only 3/9 configs, the short leg fails
+SPA-vs-long/flat (p 0.83), and walk-forward shows it *lowers* the OOS
+distribution (pooled Sharpe 0.25 → 0.03). PBO 0.77 (see the PBO subsection below)
+flags the search as strongly overfit. Verdict: keep the book long/flat — a
+documented, correctly-funded negative result.
+
+- Reproduce: `uv run --project python python python/scripts/short_eval.py`
+
+### Selection fragility (PBO) and a *global* correction (ADR-009)
+
+DSR and SPA ask whether the winner's performance is distinguishable from luck.
+**Combinatorially Symmetric Cross-Validation** asks the blunter, complementary
+question: when you pick the in-sample-best config, how often is it OOS-mediocre?
+Its summary, the **Probability of Backtest Overfitting (PBO)**, needs no
+distributional assumption — PBO above 0.5 means selection is overfitting. Wired
+into every study, it immediately discriminates:
+
+| study | Deflated Sharpe | PBO |
+|---|---:|---:|
+| Regime-model search | 0.613 | 0.623 |
+| HMM + BOCPD overlay | 0.682 | **0.921** |
+| Position sizing (vol-target + Kelly) | 0.673 | 0.369 |
+| Long/short (short the bear) | 0.551 | **0.774** |
+
+The overlay and long/short searches are exposed as strongly overfit; the sizing
+search is comparatively robust (conviction weighting carries real, if
+non-significant, OOS structure).
+
+Finally, the **global correction** closes the cross-experiment leak: reporting
+the best result across four separately-deflated searches is itself selection.
+`scripts/research_report.py` (run by `make research`) pools **all 52 trials**
+across the four studies and deflates the single best config found *anywhere*
+(`hmm_k4_vol15`) by the expected-max Sharpe over the whole union — **global DSR
+0.661 → no edge survives**. Even pooling every experiment the project has run,
+nothing clears the bar. That is the central finding, stated as honestly as the
+machinery allows.
+
+- Reproduce: `make research` → `results/research-report.html`
+
 ## 4. Survivorship and instrument choice
 
 Stated plainly because it cannot be fully fixed: choosing BTC because it is

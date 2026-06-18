@@ -1,21 +1,22 @@
-"""Does volatility-targeted / conviction sizing beat the binary regime book?
+"""Does position sizing beat the binary regime book?
 
 The HMM filter (and its BOCPD overlay) trade a binary long/flat position. The
-risk crate has always known how to size — vol targeting and capped Kelly,
-ADR-005 — but the *research* never used it. ``quantis.evaluation.sizing_strategy``
-ports the vol-target sizer into the causal research path; this script asks,
-with the repo's own machinery, whether sizing the position actually helps.
+risk crate has always known how to size — volatility targeting *and* capped
+fractional Kelly, ADR-005 — but the *research* never used either.
+``quantis.evaluation.sizing_strategy`` ports both into the causal research path;
+this script asks, with the repo's own machinery, whether sizing actually helps.
 
 Design (no look-ahead, net of real funding), mirroring ``regime_search.py`` and
 ``ensemble_eval.py``:
 
 * Fit the HMM once on the first half of the **research** partition (the sealed
   holdout is never touched) and causally evaluate on the second half.
-* Baseline = the binary long/flat strategy. Then sweep a small, genuine grid of
-  sizing knobs: target volatility x leverage cap x {hard regime, conviction}.
+* Baseline = the binary long/flat strategy. Then sweep a genuine grid of sizing
+  variants: vol targeting (target_vol x leverage x {hard, conviction}) and capped
+  fractional Kelly (fraction x cap).
 * Report each variant against the binary baseline (Sharpe is the fair comparator
   — leverage scales return and drawdown but not Sharpe), then correct for the
-  search with Deflated Sharpe and SPA (beats cash, and beats the binary book).
+  search with Deflated Sharpe, SPA, and CSCV/PBO.
 * Walk the binary baseline and the best sized variant through the identical
   walk-forward harness (research only) to compare their OOS *distributions*.
 
@@ -28,6 +29,7 @@ from __future__ import annotations
 import functools
 import json
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,6 +39,7 @@ from numpy.typing import NDArray
 from quantis.data.candles import load_candles
 from quantis.data.funding import load_daily_funding
 from quantis.data.holdout import HoldoutManifest
+from quantis.evaluation.cscv import cscv_pbo
 from quantis.evaluation.metrics import (
     deflated_sharpe_ratio,
     max_drawdown,
@@ -44,8 +47,8 @@ from quantis.evaluation.metrics import (
     sharpe_ratio,
 )
 from quantis.evaluation.multiple_testing import spa_test
-from quantis.evaluation.regime_strategy import causal_regime_returns, fit_regime_hmm
-from quantis.evaluation.sizing_strategy import causal_sized_returns
+from quantis.evaluation.regime_strategy import RegimeReturns, causal_regime_returns, fit_regime_hmm
+from quantis.evaluation.sizing_strategy import causal_kelly_returns, causal_sized_returns
 from quantis.evaluation.trial_log import TrialLog, TrialRecord
 from quantis.evaluation.walk_forward import WalkForwardResult, walk_forward_evaluate
 
@@ -56,19 +59,46 @@ _VOL_WINDOW = 20
 _TARGET_VOLS = [0.015, 0.02, 0.03]
 _MAX_LEVERAGES = [2.0, 3.0]
 _CONVICTION = [False, True]
+_KELLY_FRACTIONS = [0.25, 0.5]
+_KELLY_CAPS = [2.0, 3.0]
 _WF = {"train_min": 400, "test_window": 90, "step": 45}
+
+# A sizing variant: a name and a callable producing its returns on a close slice.
+StrategyFn = Callable[..., RegimeReturns]
 
 
 @dataclass(frozen=True)
 class Variant:
-    target_vol: float
-    max_leverage: float
-    conviction: bool
+    name: str
+    fn: StrategyFn
 
-    @property
-    def name(self) -> str:
-        tag = "cv" if self.conviction else "hr"
-        return f"tv{self.target_vol:.3f}_l{self.max_leverage:.0f}_{tag}"
+
+def _build_variants() -> list[Variant]:
+    variants: list[Variant] = []
+    for tv in _TARGET_VOLS:
+        for lev in _MAX_LEVERAGES:
+            for cv in _CONVICTION:
+                tag = "cv" if cv else "hr"
+                variants.append(
+                    Variant(
+                        f"vt_tv{tv:.3f}_l{lev:.0f}_{tag}",
+                        functools.partial(
+                            causal_sized_returns,
+                            target_vol=tv,
+                            max_leverage=lev,
+                            conviction_weighted=cv,
+                        ),
+                    )
+                )
+    for frac in _KELLY_FRACTIONS:
+        for cap in _KELLY_CAPS:
+            variants.append(
+                Variant(
+                    f"kelly_f{frac:.2f}_c{cap:.0f}",
+                    functools.partial(causal_kelly_returns, fraction=frac, cap=cap),
+                )
+            )
+    return variants
 
 
 def _stats(strat: Array, position: Array) -> tuple[float, float, float, float]:
@@ -96,7 +126,7 @@ def main() -> int:
     f_sliced = funding[slice_start:boundary]
     model = fit_regime_hmm(close[:train_end], seed=42, vol_window=_VOL_WINDOW)
 
-    def oos(returns):  # type: ignore[no-untyped-def]
+    def oos(returns: RegimeReturns) -> tuple[Array, Array, NDArray[np.int64]]:
         gidx = slice_start + returns.candle_index
         mask = gidx >= train_end
         return returns.strat[mask], returns.position[mask], gidx[mask]
@@ -107,9 +137,7 @@ def main() -> int:
     base_sharpe, base_exp, base_dd, base_total = _stats(base_strat, base_pos)
     n_obs = base_strat.size
 
-    variants = [
-        Variant(tv, lev, cv) for tv in _TARGET_VOLS for lev in _MAX_LEVERAGES for cv in _CONVICTION
-    ]
+    variants = _build_variants()
     log_path = _REPO_ROOT / "results" / "sizing-trial-log.jsonl"
     log_path.unlink(missing_ok=True)
     log = TrialLog(log_path)
@@ -117,23 +145,15 @@ def main() -> int:
     rows = []
     strat_cols = []
     excess_vs_base = []
+    strat_by_name = {}
     for v in variants:
-        strat, pos, vidx = oos(
-            causal_sized_returns(
-                model,
-                sliced,
-                vol_window=_VOL_WINDOW,
-                funding_daily=f_sliced,
-                target_vol=v.target_vol,
-                max_leverage=v.max_leverage,
-                conviction_weighted=v.conviction,
-            )
-        )
+        strat, pos, vidx = oos(v.fn(model, sliced, vol_window=_VOL_WINDOW, funding_daily=f_sliced))
         assert np.array_equal(vidx, gidx)
         log.append(TrialRecord(name=v.name, returns=[float(x) for x in strat]))
         strat_cols.append(strat)
         excess_vs_base.append(strat - base_strat)
-        rows.append((v, *_stats(strat, pos)))
+        strat_by_name[v.name] = strat
+        rows.append((v.name, *_stats(strat, pos)))
 
     rows.sort(key=lambda r: r[1], reverse=True)  # by Sharpe
 
@@ -146,27 +166,25 @@ def main() -> int:
         f"  {'binary_baseline':22}{base_sharpe:>+9.2f}{base_exp:>9.2f}x"
         f"{base_dd * 100:>7.1f}%{base_total * 100:>+8.1f}%{'—':>9}"
     )
-    for v, sh, exp, dd, total in rows:
+    for name, sh, exp, dd, total in rows:
         beats = "yes" if sh > base_sharpe else "no"
-        print(
-            f"  {v.name:22}{sh:>+9.2f}{exp:>9.2f}x{dd * 100:>7.1f}%{total * 100:>+8.1f}%{beats:>9}"
-        )
+        print(f"  {name:22}{sh:>+9.2f}{exp:>9.2f}x{dd * 100:>7.1f}%{total * 100:>+8.1f}%{beats:>9}")
 
     # --- multiple-testing correction over the sizing search ---
-    best_v, best_sharpe = rows[0][0], rows[0][1]
-    best_strat = strat_cols[variants.index(best_v)]
+    best_name, best_sharpe = rows[0][0], rows[0][1]
+    best_strat = strat_by_name[best_name]
     trial_sharpes = log.sharpes()
     psr = probabilistic_sharpe_ratio(best_strat, 0.0, 1.0)
     dsr = deflated_sharpe_ratio(best_strat, trial_sharpes, 1.0)
     spa_cash = spa_test(np.column_stack(strat_cols), seed=42)
     spa_base = spa_test(np.column_stack(excess_vs_base), seed=42)
+    pbo = cscv_pbo(np.column_stack(strat_cols)).pbo
 
     n_beat = sum(1 for _, sh, *_ in rows if sh > base_sharpe)
     print("\n=== MULTIPLE-TESTING VERDICT (net of funding, OOS-within-research) ===")
     print(f"  sizing variants beating the binary book on Sharpe (raw): {n_beat}/{len(variants)}")
     print(
-        f"  best sizing: {best_v.name}  "
-        f"(Sharpe ann {best_sharpe:+.2f} vs binary {base_sharpe:+.2f})"
+        f"  best sizing: {best_name}  (Sharpe ann {best_sharpe:+.2f} vs binary {base_sharpe:+.2f})"
     )
     print("  -- absolute edge (is the best variant's Sharpe real after the search?) --")
     print(f"  PSR (vs 0, uncorrected):          {psr:.3f}")
@@ -175,6 +193,7 @@ def main() -> int:
     print("  -- relative (does sizing beat the binary book it sizes?) --")
     print(f"  SPA p-value (best beats binary):  {spa_base.spa_pvalue:.3f}")
     print(f"  Reality Check p-value (conserv.): {spa_base.reality_check_pvalue:.3f}")
+    print(f"  PBO (CSCV, prob. backtest overfit):{pbo:>6.3f}")
     survives = dsr > 0.95 and spa_base.spa_pvalue < 0.05
     verdict = "sizing edge survives the search" if survives else "no edge survives the correction"
     print(f"  --> {verdict}")
@@ -182,20 +201,15 @@ def main() -> int:
     # --- walk-forward distribution: binary baseline vs the best sized variant ---
     research = close[:boundary]
     research_funding = funding[:boundary]
-    sized_fn = functools.partial(
-        causal_sized_returns,
-        target_vol=best_v.target_vol,
-        max_leverage=best_v.max_leverage,
-        conviction_weighted=best_v.conviction,
-    )
+    best_fn = next(v.fn for v in variants if v.name == best_name)
 
-    def wf(returns_fn) -> WalkForwardResult:  # type: ignore[no-untyped-def]
+    def wf(returns_fn: StrategyFn) -> WalkForwardResult:
         return walk_forward_evaluate(
             research, **_WF, seed=42, funding_daily=research_funding, returns_fn=returns_fn
         )
 
     wf_base = wf(causal_regime_returns)
-    wf_sized = wf(sized_fn)
+    wf_sized = wf(best_fn)
     print(
         f"\n=== WALK-FORWARD DISTRIBUTION "
         f"(research only, {wf_base.n_windows} windows, net funding) ==="
@@ -219,7 +233,7 @@ def main() -> int:
             "max_drawdown": base_dd,
             "total_return": base_total,
         },
-        "best_sizing": best_v.name,
+        "best_sizing": best_name,
         "best_sizing_sharpe_ann": best_sharpe,
         "variants_beating_binary": n_beat,
         "psr_uncorrected": psr,
@@ -227,11 +241,16 @@ def main() -> int:
         "spa_pvalue_vs_cash": spa_cash.spa_pvalue,
         "spa_pvalue_vs_binary": spa_base.spa_pvalue,
         "reality_check_pvalue_vs_binary": spa_base.reality_check_pvalue,
+        "pbo": pbo,
         "edge_survives_correction": survives,
         "walk_forward": {
             "n_windows": wf_base.n_windows,
             "pooled_sharpe_binary": wf_base.pooled_strat_sharpe,
             "pooled_sharpe_sizing": wf_sized.pooled_strat_sharpe,
+            "median_window_sharpe_binary": wf_base.median_strat_sharpe,
+            "median_window_sharpe_sizing": wf_sized.median_strat_sharpe,
+            "frac_positive_binary": wf_base.frac_positive_return,
+            "frac_positive_sizing": wf_sized.frac_positive_return,
             "mean_exposure_binary": wf_base.mean_time_in_market,
             "mean_exposure_sizing": wf_sized.mean_time_in_market,
         },

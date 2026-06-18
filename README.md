@@ -60,15 +60,21 @@ across a 9-variant search it too shows **no edge that survives deflation** (DSR
 0.68, SPA-vs-HMM p 0.36): the overlay reshapes risk, exactly as designed, without
 adding searchable alpha. Reproduce with `scripts/ensemble_eval.py`.
 
-Sizing the position tells the same story with a twist. Swapping the binary
-long/flat book for a volatility-targeted, conviction-weighted weight — a causal
-port of the risk crate's own sizer ([ADR-008](docs/adr/ADR-008-research-position-sizing.md))
-— markedly improves out-of-sample *consistency* (walk-forward median window Sharpe
-**0.13 → 0.70**, positive windows **50% → 79%**, at lower exposure), driven by
-*conviction* weighting rather than vol targeting alone. Yet across a 12-variant
-search it still shows **no edge that survives deflation** (DSR 0.65, SPA-vs-binary
-p 0.25): a genuine risk-shaping gain, not searchable alpha. Reproduce with
-`scripts/sizing_eval.py`.
+The discipline now spans four searches and one global correction, and the verdict
+only sharpens. **Sizing** the book — volatility targeting, conviction weighting,
+and capped fractional Kelly, a causal port of the risk crate's own sizers
+([ADR-008](docs/adr/ADR-008-research-position-sizing.md)) — lifts single-split
+Sharpe (best +0.60) and improves walk-forward consistency, but no variant survives
+its 16-config deflation. **Shorting** the bear regime
+([ADR-010](docs/adr/ADR-010-long-short-regime-trading.md)), despite a funding
+tailwind a short collects, *degrades* the out-of-sample distribution (pooled
+Sharpe 0.25 → 0.03) and is left opt-in. A new overfitting diagnostic — CSCV's
+**Probability of Backtest Overfitting** ([ADR-009](docs/adr/ADR-009-overfitting-diagnostics.md))
+— flags the overlay (PBO 0.92) and long/short (0.77) searches as fragile. And the
+capstone, a **global correction** that pools **all 52 trials across every study**,
+deflates the best configuration found *anywhere* to a **global Deflated Sharpe of
+0.66 — no edge survives**. Reproduce the whole story with `make research` →
+`results/research-report.html`.
 
 ## How the model behaves across market regimes
 
@@ -165,6 +171,7 @@ Prerequisites: a stable Rust toolchain (`rustup`) and [`uv`](https://docs.astral
 ```sh
 make setup   # Python env, build the Rust extension, pre-commit hooks
 make demo    # seeded backtest + render the research dashboard, offline (<5 min)
+make research # all honest research studies + the consolidated report (PBO, global DSR)
 make ci      # everything CI runs: fmt, clippy -D warnings, mypy strict, all tests
 make smoke   # the backtest, asserting the committed determinism hash
 make bench   # Criterion benchmarks (book ladders, backtest loop)
@@ -190,7 +197,7 @@ uv run --project python python python/scripts/evaluate_holdout.py # the one-shot
 | Doc | What it covers |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | C4 views + backtest/live/research data flow |
-| [docs/statistical-honesty.md](docs/statistical-honesty.md) | leakage, CV, DSR/SPA, the one-shot holdout |
+| [docs/statistical-honesty.md](docs/statistical-honesty.md) | leakage, CV, DSR/SPA, CSCV/PBO, the global correction, the one-shot holdout |
 | [docs/losing-money.md](docs/losing-money.md) | what would lose money, with quantified sensitivities |
 | [docs/runbook.md](docs/runbook.md) | operating the live engine: start / monitor / kill / recover |
 | [docs/backtest-paper-gap.md](docs/backtest-paper-gap.md) | measured backtest↔paper gap and its causes |
@@ -249,10 +256,11 @@ avoid. Fuller treatment in [docs/losing-money.md](docs/losing-money.md) and
   honestly as such — not an edge. A walk-forward refit across many windows is
   the next rigorous step.
 - **The demo strategies are not alpha.** The SMA-cross (execution demo), the HMM
-  regime filter, the HMM+BOCPD risk-off overlay, and the vol-targeted/conviction
-  sizing layer (research demos) all exist to exercise the machinery; none is
-  presented as a money-maker, and each is reported next to the multiple-testing
-  correction that shows so.
+  regime filter, the HMM+BOCPD risk-off overlay, the vol-target/conviction/Kelly
+  sizing layer, and the long/short book (research demos) all exist to exercise the
+  machinery; none is presented as a money-maker, and every one is reported next to
+  the multiple-testing correction — and now the global, all-studies correction
+  (`make research`) — that shows so.
 
 ## License
 

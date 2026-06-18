@@ -19,7 +19,10 @@ from quantis.evaluation.regime_strategy import (
     regime_features,
 )
 from quantis.evaluation.sizing_strategy import (
+    DEFAULT_KELLY_CAP,
     DEFAULT_MAX_LEVERAGE,
+    causal_kelly_returns,
+    causal_kelly_weight,
     causal_position_weight,
     causal_sized_returns,
 )
@@ -129,3 +132,46 @@ def test_deterministic(fitted, close: np.ndarray) -> None:  # type: ignore[no-un
     b = causal_sized_returns(fitted, close, vol_window=_VOL_WINDOW, target_vol=_TARGET_VOL)
     assert np.array_equal(a.position, b.position)
     assert np.array_equal(a.strat, b.strat)
+
+
+def test_kelly_weight_matches_the_risk_crate_formula(fitted, close: np.ndarray) -> None:  # type: ignore[no-untyped-def]
+    """Kelly weight == clamp(fraction · expected_return / realized_vol**2, 0, cap),
+    with expected_return = filter_proba @ state means — the long-only equity-weight
+    form of crate::risk::capped_fractional_kelly."""
+    w, valid = causal_kelly_weight(
+        fitted, close, fraction=0.25, cap=DEFAULT_KELLY_CAP, vol_window=_VOL_WINDOW
+    )
+    fm = regime_features(close, _VOL_WINDOW)
+    x = fm.values[valid]
+    edge = fitted.filter_proba(x) @ fitted.means[:, 0]
+    var = realized_vol(close, window=_VOL_WINDOW)[valid] ** 2
+    expected = np.clip(0.25 * edge / var, 0.0, DEFAULT_KELLY_CAP)
+    assert np.allclose(w, expected)
+    assert np.all(w >= 0.0) and np.all(w <= DEFAULT_KELLY_CAP + 1e-12)
+
+
+def test_kelly_floors_to_cash_when_edge_is_nonpositive(fitted, close: np.ndarray) -> None:  # type: ignore[no-untyped-def]
+    """Where the model's expected return is <= 0 (bear/chop), the long-only Kelly
+    weight is exactly 0 — no separate regime gate needed."""
+    w, valid = causal_kelly_weight(fitted, close, vol_window=_VOL_WINDOW)
+    fm = regime_features(close, _VOL_WINDOW)
+    edge = fitted.filter_proba(fm.values[valid]) @ fitted.means[:, 0]
+    assert np.all(w[edge <= 0.0] == 0.0)
+    assert np.any(w > 0.0)  # and it does take real positions where edge > 0
+
+
+def test_kelly_fraction_zero_is_flat_and_cap_binds(fitted, close: np.ndarray) -> None:  # type: ignore[no-untyped-def]
+    flat, _ = causal_kelly_weight(fitted, close, fraction=0.0, vol_window=_VOL_WINDOW)
+    assert np.all(flat == 0.0)
+    capped, _ = causal_kelly_weight(fitted, close, fraction=1e6, cap=2.0, vol_window=_VOL_WINDOW)
+    held = capped > 0
+    assert held.any() and np.allclose(capped[held], 2.0)
+
+
+def test_kelly_is_prefix_causal(fitted, close: np.ndarray) -> None:  # type: ignore[no-untyped-def]
+    full = causal_kelly_returns(fitted, close, vol_window=_VOL_WINDOW)
+    for k in (400, 800):
+        prefix = causal_kelly_returns(fitted, close[:k], vol_window=_VOL_WINDOW)
+        m = prefix.candle_index.size - 1
+        assert np.array_equal(prefix.candle_index[:m], full.candle_index[:m])
+        assert np.allclose(prefix.position[:m], full.position[:m])

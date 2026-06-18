@@ -170,6 +170,15 @@ class GaussianHMM:
         params = self._require_params_match(x)
         return self._viterbi(params, _ensure_2d(x))
 
+    @property
+    def means(self) -> Array:
+        """Fitted per-state feature means, ``(K, D)``, in raw state order.
+
+        Column 0 is the per-bar mean of the return feature, so
+        ``filter_proba(x) @ means[:, 0]`` is the model's causal expected next-bar
+        return — the edge estimate Kelly sizing consumes (ADR-008 addendum)."""
+        return self._require_fitted().means
+
     def regime_order(self) -> NDArray[np.int64]:
         """State indices sorted by mean of feature 0 (ascending).
 

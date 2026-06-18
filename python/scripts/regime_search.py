@@ -39,6 +39,7 @@ from numpy.typing import NDArray
 from quantis.data.candles import load_candles
 from quantis.data.funding import load_daily_funding
 from quantis.data.holdout import HoldoutManifest
+from quantis.evaluation.cscv import cscv_pbo
 from quantis.evaluation.metrics import (
     deflated_sharpe_ratio,
     probabilistic_sharpe_ratio,
@@ -159,6 +160,7 @@ def main() -> int:
     dsr = deflated_sharpe_ratio(best_returns, trial_sharpes, 1.0)
     spa_cash = spa_test(np.column_stack(strat_cols), seed=42)  # absolute edge (beats 0)
     spa_bh = spa_test(np.column_stack(excess_cols), seed=42)  # relative (beats buy & hold)
+    pbo = cscv_pbo(np.column_stack(strat_cols)).pbo  # prob. the IS-best is OOS-mediocre
 
     n_beat = sum(1 for _, sh, _, _ in rows if sh > hold_sharpe)
     print("\n=== MULTIPLE-TESTING VERDICT (net of funding, OOS-within-research) ===")
@@ -171,6 +173,7 @@ def main() -> int:
     print("  -- relative (does the best beat buy & hold on this bull-dominated span?) --")
     print(f"  SPA p-value (best beats B&H):     {spa_bh.spa_pvalue:.3f}")
     print(f"  Reality Check p-value (conserv.): {spa_bh.reality_check_pvalue:.3f}")
+    print(f"  PBO (CSCV, prob. backtest overfit):{pbo:>6.3f}   (>0.5 = selection is overfitting)")
     survives = dsr > 0.95 and spa_cash.spa_pvalue < 0.05
     verdict = "absolute edge survives the search" if survives else "no edge survives the correction"
     print(f"  --> {verdict}")
@@ -187,6 +190,7 @@ def main() -> int:
         "spa_pvalue_vs_cash": spa_cash.spa_pvalue,
         "spa_pvalue_vs_buy_hold": spa_bh.spa_pvalue,
         "reality_check_pvalue_vs_buy_hold": spa_bh.reality_check_pvalue,
+        "pbo": pbo,
         "configs_beating_buy_hold": n_beat,
     }
     out = _REPO_ROOT / "results" / "regime-search.json"

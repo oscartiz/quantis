@@ -122,3 +122,23 @@ rest of the repo: a risk-shaping improvement, not a searchable alpha.
 - `tests/test_sizing.py::test_leverage_cap_binds_when_target_is_large`
 - `tests/test_sizing.py::test_position_is_prefix_causal`
 - Reproduce the study: `uv run --project python python python/scripts/sizing_eval.py`
+
+## Addendum (2026-06-17): capped fractional Kelly
+
+The "natural follow-up" above is now implemented as
+`sizing_strategy.causal_kelly_returns`, the risk crate's *other* sizer
+(`capped_fractional_kelly`, ADR-005). The previously-missing **edge** estimate is
+taken from the model itself: ``filter_proba(x) @ means[:, 0]`` is the HMM's causal
+expected next-bar return under the fixed fitted params (a new public
+`GaussianHMM.means` exposes the state means). The weight is
+``clamp(fraction · edge / realized_vol², 0, cap)`` — long-only, so the floor at 0
+takes the book to cash whenever the expected return is non-positive, with no
+separate regime gate.
+
+Folded into the same study, Kelly is just more variants in the search (16 total):
+`scripts/sizing_eval.py` now sweeps vol-target *and* Kelly. The aggressive
+`kelly_f0.50_c2` posts the highest single-split Sharpe (+0.60) but at ~1.8x mean
+exposure and a 57% drawdown — and, like everything else, **no edge survives** the
+16-variant correction (DSR 0.673, SPA-vs-binary p 0.367, PBO 0.369). It is a
+sharper risk/return dial, not new alpha. Tests:
+`tests/test_sizing.py::test_kelly_*`.

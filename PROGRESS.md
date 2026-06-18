@@ -134,6 +134,22 @@ holds (Python-driven backtest == CLI hash).
   window Sharpe 0.13→0.70 / positive windows 50%→79% (consistency), but over a
   12-variant search **no edge survives** (DSR 0.65, SPA-vs-binary p 0.25). README
   + honesty §3 updated; `test_sizing.py` (7 tests). Python suite now 85 green.
+- [DONE] Overfitting-diagnostics + strategy-space batch (ADR-009, ADR-010, ADR-008
+  addendum):
+  - **CSCV/PBO** (`quantis.evaluation.cscv`): Probability of Backtest Overfitting,
+    wired into all four study scripts. Per-study PBO: regime 0.62, overlay 0.92,
+    sizing 0.37, long/short 0.77.
+  - **Global correction** + consolidated report (`scripts/research_report.py`,
+    `make research`): pools all 52 trials across studies → global DSR 0.661, no
+    edge survives. Renders `results/research-report.html`.
+  - **Capped Kelly sizing** (`sizing_strategy.causal_kelly_returns`): edge =
+    `filter_proba @ means[:,0]` (new public `GaussianHMM.means`), folded into the
+    sizing study (now 16 variants). Best `kelly_f0.50_c2` Sharpe +0.60 @ 1.8x.
+  - **Long/short** (`directional_strategy.causal_long_short_returns`): shorts the
+    bear regime, funding correctly signed; degrades OOS (pooled 0.25→0.03) → kept
+    opt-in. `short_eval.py`.
+  - Tests: `test_cscv.py` (4), `test_directional.py` (5), `test_sizing.py` Kelly
+    (4). README + statistical-honesty.md §3/§4 updated. Python suite now 98 green.
 - [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
 - [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
 - [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
@@ -147,15 +163,19 @@ items) are both **DONE**. The project is BTC-only by standing decision (user,
 blocked: deep-L2/L3 backfill needs the HL S3 archive, and the testnet
 `ActionSigner` needs operator keys.
 
+Research now spans four searches (regime / overlay / sizing / long-short), all
+corrected per-study (DSR/SPA/PBO) and **globally** (`make research`); every one
+lands on "no edge survives" — the central, honestly-reported finding. New work
+must go through that same machinery and join the global trial union.
+
 On **"CONTINUE"** with no new instruction: pick the next highest-value *fully
 offline, BTC-only* enhancement that makes this a more powerful research tool, run
-it through the existing honesty harness (walk-forward + DSR/SPA, net of funding),
-and document it (ADR + statistical-honesty.md + README). Candidates: a third
-causal regime model in the ADR-003 family (e.g. MS-GARCH) compared honestly;
-richer causal feature families fed through the leakage canary; or capped
-fractional Kelly sizing (the risk crate's other sizer — vol-targeting is now
-ported in ADR-008, Kelly is the natural next sizer). Otherwise: name a follow-up
-above or a new direction.
+it through the existing honesty harness (walk-forward + DSR/SPA/PBO + global
+correction, net of funding), and document it (ADR + statistical-honesty.md +
+README). Candidates: a third causal regime model in the ADR-003 family (e.g.
+MS-GARCH) compared honestly; richer causal feature families fed through the
+leakage canary; or block-bootstrap confidence intervals on the headline metrics.
+Otherwise: name a follow-up above or a new direction.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 

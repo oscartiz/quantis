@@ -43,6 +43,7 @@ from numpy.typing import NDArray
 from quantis.data.candles import load_candles
 from quantis.data.funding import load_daily_funding
 from quantis.data.holdout import HoldoutManifest
+from quantis.evaluation.cscv import cscv_pbo
 from quantis.evaluation.ensemble_strategy import causal_ensemble_returns
 from quantis.evaluation.metrics import (
     deflated_sharpe_ratio,
@@ -165,6 +166,7 @@ def main() -> int:
     dsr = deflated_sharpe_ratio(best_strat, trial_sharpes, 1.0)
     spa_cash = spa_test(np.column_stack(strat_cols), seed=42)  # beats cash (0)
     spa_hmm = spa_test(np.column_stack(excess_vs_hmm), seed=42)  # beats the plain HMM
+    pbo = cscv_pbo(np.column_stack(strat_cols)).pbo
 
     n_beat = sum(1 for _, sh, *_ in rows if sh > hmm_sharpe)
     print("\n=== MULTIPLE-TESTING VERDICT (net of funding, OOS-within-research) ===")
@@ -179,6 +181,7 @@ def main() -> int:
     print("  -- relative (does the overlay beat the plain HMM it overlays?) --")
     print(f"  SPA p-value (best beats HMM):     {spa_hmm.spa_pvalue:.3f}")
     print(f"  Reality Check p-value (conserv.): {spa_hmm.reality_check_pvalue:.3f}")
+    print(f"  PBO (CSCV, prob. backtest overfit):{pbo:>6.3f}")
     survives = dsr > 0.95 and spa_hmm.spa_pvalue < 0.05
     verdict = "overlay edge survives the search" if survives else "no edge survives the correction"
     print(f"  --> {verdict}")
@@ -233,6 +236,7 @@ def main() -> int:
         "spa_pvalue_vs_cash": spa_cash.spa_pvalue,
         "spa_pvalue_vs_hmm": spa_hmm.spa_pvalue,
         "reality_check_pvalue_vs_hmm": spa_hmm.reality_check_pvalue,
+        "pbo": pbo,
         "edge_survives_correction": survives,
         "walk_forward": {
             "n_windows": wf_hmm.n_windows,
