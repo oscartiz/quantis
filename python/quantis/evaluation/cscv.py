@@ -59,7 +59,9 @@ def _sharpe_columns(block: Array) -> Array:
     """Per-column (per-config) Sharpe over the rows of ``block``; 0 where flat."""
     mean = block.mean(axis=0)
     std = block.std(axis=0, ddof=1)
-    return np.where(std > 0.0, mean / std, 0.0)
+    out = np.zeros_like(mean)
+    np.divide(mean, std, out=out, where=std > 0.0)  # safe: no 0/0 in the flat columns
+    return out
 
 
 def cscv_pbo(performance: Array, *, n_blocks: int = 10) -> PboResult:

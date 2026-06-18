@@ -52,8 +52,9 @@ research: ## Run all honest research studies + render the consolidated report (o
 	cd $(PY_DIR) && uv run python scripts/ensemble_eval.py
 	cd $(PY_DIR) && uv run python scripts/sizing_eval.py
 	cd $(PY_DIR) && uv run python scripts/short_eval.py
+	cd $(PY_DIR) && uv run python scripts/compare_strategies.py
 	cd $(PY_DIR) && uv run python scripts/research_report.py
-	@echo "Open results/research-report.html in a browser."
+	@echo "Open results/research-report.html and docs/charts/strategy-comparison.png."
 
 smoke: ## Deterministic backtest must reproduce the committed golden hash
 	cargo run --release -q -p quantis-cli -- backtest --config $(ENGINE_EXAMPLE) \
