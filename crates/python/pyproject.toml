@@ -5,8 +5,14 @@ build-backend = "maturin"
 [project]
 name = "quantis-core"
 description = "Rust core bindings for the Quantis research layer"
+license = "MIT"
+authors = [{ name = "Quantis contributors" }]
+keywords = ["trading", "backtesting", "hyperliquid", "regime", "pyo3"]
 requires-python = ">=3.11"
 dynamic = ["version"]
+
+[project.urls]
+Repository = "https://github.com/oscartiz/quantis"
 
 [tool.maturin]
 module-name = "quantis_core"

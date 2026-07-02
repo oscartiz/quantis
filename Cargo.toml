@@ -24,7 +24,14 @@ default-members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "MIT"
+authors = ["Quantis contributors"]
+repository = "https://github.com/oscartiz/quantis"
+keywords = ["trading", "backtesting", "hyperliquid", "quant", "regime"]
+# Application workspace: crates are consumed via the repo (binary + PyO3
+# wheel), never crates.io. publish = false makes that fail-closed.
+publish = false
 
 [workspace.dependencies]
 # Internal crates

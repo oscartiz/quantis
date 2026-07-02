@@ -3,7 +3,12 @@ name = "quantis-risk"
 description = "Pre-trade risk checks, position sizing, drawdown limits, kill switch"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
 
 [dependencies]
 quantis-core.workspace = true

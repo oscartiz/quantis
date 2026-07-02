@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "quantis"
 version = "0.1.0"
 description = "Research layer for the Quantis trading engine: features, regime models, honest evaluation"
+license = "MIT"
+authors = [{ name = "Quantis contributors" }]
+keywords = ["trading", "backtesting", "hyperliquid", "regime", "hmm", "bocpd"]
 requires-python = ">=3.11"
 dependencies = [
   "matplotlib>=3.11.0",
@@ -23,6 +26,9 @@ dev = [
   "ruff>=0.8",
   "types-PyYAML>=6.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/oscartiz/quantis"
 
 [tool.hatch.build.targets.wheel]
 packages = ["quantis"]

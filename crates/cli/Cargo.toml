@@ -3,7 +3,12 @@ name = "quantis-cli"
 description = "Operational command-line interface for the Quantis engine"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords.workspace = true
+publish.workspace = true
 
 [[bin]]
 name = "quantis"
@@ -12,11 +17,11 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-quantis-backtest = { version = "0.1.0", path = "../backtest" }
+quantis-backtest = { path = "../backtest" }
 quantis-core.workspace = true
-quantis-execution = { version = "0.1.0", path = "../execution" }
+quantis-execution = { path = "../execution" }
 quantis-market-data = { path = "../market-data" }
-quantis-risk = { version = "0.1.0", path = "../risk" }
+quantis-risk = { path = "../risk" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json"] }
