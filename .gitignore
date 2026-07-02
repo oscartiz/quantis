@@ -21,5 +21,6 @@ config/*.local.*
 data/capture/
 results/
 
-# OS / editor
+# OS / editor / local agent settings
 .DS_Store
+.claude/

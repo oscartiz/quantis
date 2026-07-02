@@ -1,8 +1,8 @@
 # Quantis — Progress Ledger
 
-> Single source of truth for resumption. If a session is cut off, resume from
-> **NEXT ACTION** below. Never regenerate files marked [DONE]. If a file was
-> interrupted mid-write, discard the fragment and regenerate it whole.
+> The build ledger: what was built, in what order, what was verified at each
+> step, and the decisions that shaped it. Newest work first; the original
+> phased plan is preserved at the bottom for the record.
 
 ## Status
 
@@ -150,32 +150,27 @@ holds (Python-driven backtest == CLI hash).
     opt-in. `short_eval.py`.
   - Tests: `test_cscv.py` (4), `test_directional.py` (5), `test_sizing.py` Kelly
     (4). README + statistical-honesty.md §3/§4 updated. Python suite now 98 green.
-- [TODO] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling.
-- [TODO] Multi-asset: portfolio risk aggregate + cross-asset regime research.
-- [TODO] Wire the testnet `ActionSigner` with a real key; measure paper↔testnet
-  gap (needs testnet keys; ADR-006).
+- [DEFERRED] Deep-L2/L3 backfill to lift the latency/queue resolution ceiling
+  (blocked on the Hyperliquid S3 archive or a data vendor).
+- [DEFERRED] Multi-asset portfolio risk aggregate + cross-asset regime research
+  (out of scope by standing decision: the project is BTC-only).
+- [DEFERRED] Wire the testnet `ActionSigner` with a real key and measure the
+  paper↔testnet gap (blocked on operator keys; ADR-006).
 
-## NEXT ACTION
+## Where work would continue
 
-The maker path and the HMM+BOCPD ensemble (the two highest-value fully-offline
-items) are both **DONE**. The project is BTC-only by standing decision (user,
-2026-06-16): do **not** pursue multi-asset. Remaining items are externally
-blocked: deep-L2/L3 backfill needs the HL S3 archive, and the testnet
-`ActionSigner` needs operator keys.
+The build is complete; the deferred items above are externally blocked. The
+project is BTC-only by standing decision (2026-06-16); multi-asset work is out
+of scope.
 
-Research now spans four searches (regime / overlay / sizing / long-short), all
+Research spans four searches (regime / overlay / sizing / long-short), all
 corrected per-study (DSR/SPA/PBO) and **globally** (`make research`); every one
-lands on "no edge survives" — the central, honestly-reported finding. New work
-must go through that same machinery and join the global trial union.
-
-On **"CONTINUE"** with no new instruction: pick the next highest-value *fully
-offline, BTC-only* enhancement that makes this a more powerful research tool, run
-it through the existing honesty harness (walk-forward + DSR/SPA/PBO + global
-correction, net of funding), and document it (ADR + statistical-honesty.md +
-README). Candidates: a third causal regime model in the ADR-003 family (e.g.
-MS-GARCH) compared honestly; richer causal feature families fed through the
-leakage canary; or block-bootstrap confidence intervals on the headline metrics.
-Otherwise: name a follow-up above or a new direction.
+lands on "no edge survives" — the central, honestly-reported finding. Any new
+strategy work must go through that same machinery and join the global trial
+union. Natural candidates: a third causal regime model in the ADR-003 family
+(e.g. MS-GARCH) compared honestly; richer causal feature families fed through
+the leakage canary; or block-bootstrap confidence intervals on the headline
+metrics.
 
 ## Decisions locked (clarifying Q&A, 2026-06-11)
 
@@ -192,9 +187,8 @@ Otherwise: name a follow-up above or a new direction.
 
 ## Standing assumptions (user may correct any time)
 
-- Repo lives at `/Users/tiz/Code/Repos/quantis`; user pushes to GitHub themselves.
-  CI workflows are committed; branch protection (block merge on red) is a GitHub
-  setting the user enables on push.
+- The maintainer pushes to GitHub; CI workflows are committed, and branch
+  protection (block merge on red) is a GitHub setting enabled on push.
 - Toolchain verified locally: cargo 1.95 (edition 2024), uv 0.10, pyo3 0.26
   (builds against system Python 3.14; project pins 3.11 floor), maturin >=1.7.
 - License: **MIT** (narrowed from "MIT OR Apache-2.0" to cut boilerplate).
@@ -285,52 +279,42 @@ tests, 6 Python tests), `make demo` validates the example config end to end,
 equivalent ≳2.4µs/event → ~34× (ADR-002). Demo strategy on sample: −2.82 net
 over 15 min (2.01 fees) — honest small loss for a labeled non-alpha demo.
 
-### Phase 2 — PyO3 bindings + research layer + regime models [TODO]
+### Phase 2 — PyO3 bindings + research layer + regime models [DONE — see above]
 maturin bindings (backtest runner, event-log readers), data loaders,
 YAML-driven feature pipeline, Gaussian HMM (own EM, validated vs. hmmlearn),
 BOCPD, walk-forward + purged k-fold w/ embargo + leakage canary tests,
 holdout wall (hash committed, untouched), ADR-003.
 
-### Phase 3 — Realistic fills + risk + statistical evaluation [TODO]
+### Phase 3 — Realistic fills + risk + statistical evaluation [DONE — see above]
 Fill model v1 (maker/taker fees, queue approximation, latency injection,
 book-walk slippage, funding), risk crate (vol targeting, capped Kelly, stops,
 drawdown limits, kill switch, pre-trade veto API), DSR + SPA over logged trial
 history, docs/losing-money.md with quantified sensitivities, ADR-004, ADR-005.
 
-### Phase 4 — Paper/testnet execution + observability + chaos [TODO]
+### Phase 4 — Paper/testnet execution + observability + chaos [DONE — see above]
 Order state machine w/ idempotent client IDs, paper gateway sharing backtest
 matching code, testnet gateway, reconciliation loop, tracing + Prometheus +
 Grafana JSON, documented chaos test (feed kill mid-order), backtest-vs-paper
 gap report.
 
-### Phase 5 — Dashboard + docs + polish [TODO]
+### Phase 5 — Dashboard + docs + polish [DONE — see above]
 Static HTML research dashboard, README final w/ <5-min one-command demo,
 architecture.md (C4), runbook.md, scaling.md, statistical-honesty doc, holdout
 evaluated exactly once, known-limitations section.
 
 ## Pending decisions
 
+All resolved; kept for the record.
+
 - ~~Order-book ladder (BTreeMap vs sorted-vec)~~ — RESOLVED: Vec, ADR-002 appendix.
-- SPA (Hansen) vs. White's Reality Check: pick in Phase 3 based on trial-log
-  shape.
-- Phase 2: confirm hmmlearn is acceptable as a *test oracle* dev-dependency
-  (the shipped HMM is hand-rolled; hmmlearn only validates it).
+- ~~SPA (Hansen) vs. White's Reality Check~~ — RESOLVED in Phase 3: both are
+  implemented (`quantis/evaluation/multiple_testing.py`); Hansen SPA is the
+  headline test.
+- ~~hmmlearn as a dev-dependency~~ — RESOLVED in Phase 2: accepted as a *test
+  oracle* only (the shipped HMM is hand-rolled; hmmlearn validates it in tests).
 
 ## Toolchain notes (verified this phase)
 
 - pyo3 0.26, tokio-tungstenite 0.29 (rustls + **ring** provider — must call
   `CryptoProvider::install_default()`; done in `ws::run_feed`).
 - bincode 1.x (classic serde API), rand 0.9, criterion 0.8.
-- Shell CWD can drift to `python/` between turns — always `cd` to repo root
-  before git ops.
-
-## NEXT ACTION
-
-On **"CONTINUE"**: begin Phase 2. First sub-step: scaffold maturin build of
-`crates/python` into the `quantis` package env, expose a `run_backtest(config_path)`
-binding returning the artifact dict + an event-log reader yielding arrays, with
-a cross-language test asserting the Python-driven backtest reproduces the same
-determinism hash as the CLI. Then the YAML feature pipeline, then the Gaussian
-HMM (own EM, validated vs hmmlearn), then BOCPD, then purged walk-forward CV
-with embargo + leakage canary, then raise the holdout wall (commit its hash,
-do not touch). ADR-003 records the regime-model selection.
