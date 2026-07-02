@@ -18,18 +18,18 @@ bindings: ## Build the Rust PyO3 extension into the Python venv (maturin develop
 
 fmt: ## Auto-format Rust and Python
 	cargo fmt --all
-	cd $(PY_DIR) && uv run ruff format .
-	cd $(PY_DIR) && uv run ruff check --fix .
+	cd $(PY_DIR) && uv run ruff format . ../benchmarks
+	cd $(PY_DIR) && uv run ruff check --fix . ../benchmarks
 
 fmt-check: ## Check formatting without writing
 	cargo fmt --all --check
-	cd $(PY_DIR) && uv run ruff format --check .
+	cd $(PY_DIR) && uv run ruff format --check . ../benchmarks
 
 lint: ## Clippy (warnings are errors), ruff, mypy strict
 	cargo clippy --all-targets -- -D warnings
 	cargo check -p quantis-python
-	cd $(PY_DIR) && uv run ruff check .
-	cd $(PY_DIR) && uv run mypy quantis tests
+	cd $(PY_DIR) && uv run ruff check . ../benchmarks
+	cd $(PY_DIR) && uv run mypy quantis tests ../benchmarks/book_bench.py
 
 test: test-rust test-python ## All tests
 

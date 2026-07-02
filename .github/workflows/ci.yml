@@ -43,9 +43,9 @@ jobs:
       # Build the Rust extension into the venv so the cross-language tests
       # (Python-driven backtest must reproduce the golden hash) actually run.
       - run: uv run maturin develop --release -m ../crates/python/Cargo.toml
-      - run: uv run ruff format --check .
-      - run: uv run ruff check .
-      - run: uv run mypy quantis tests
+      - run: uv run ruff format --check . ../benchmarks
+      - run: uv run ruff check . ../benchmarks
+      - run: uv run mypy quantis tests ../benchmarks/book_bench.py
       - run: uv run pytest -q
 
   smoke:

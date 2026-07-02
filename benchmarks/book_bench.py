@@ -39,7 +39,6 @@ def apply_snapshot_workload() -> float:
     """Rebuild ladders per snapshot, mirroring OrderBook::apply_snapshot
     (drop bad qty, verify sortedness, crossed check)."""
     snaps = make_snapshots()
-    best = time.perf_counter()  # placeholder; replaced below
     best_ns = float("inf")
     for _ in range(REPEATS):
         t0 = time.perf_counter()
@@ -47,18 +46,17 @@ def apply_snapshot_workload() -> float:
         asks: list[tuple[int, int]] = []
         crossed = 0
         for snap_bids, snap_asks in snaps:
-            bids = [l for l in snap_bids if l[1] > 0]
-            asks = [l for l in snap_asks if l[1] > 0]
+            bids = [lvl for lvl in snap_bids if lvl[1] > 0]
+            asks = [lvl for lvl in snap_asks if lvl[1] > 0]
             if any(bids[i][0] <= bids[i + 1][0] for i in range(len(bids) - 1)):
-                bids.sort(key=lambda l: -l[0])
+                bids.sort(key=lambda lvl: -lvl[0])
             if any(asks[i][0] >= asks[i + 1][0] for i in range(len(asks) - 1)):
-                asks.sort(key=lambda l: l[0])
+                asks.sort(key=lambda lvl: lvl[0])
             if bids and asks and bids[0][0] >= asks[0][0]:
                 crossed += 1
         elapsed = time.perf_counter() - t0
         best_ns = min(best_ns, elapsed * 1e9 / SNAPSHOTS)
     assert crossed == 0
-    del best
     return best_ns
 
 
