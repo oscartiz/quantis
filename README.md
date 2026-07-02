@@ -198,7 +198,8 @@ it do precisely that, and nothing more.
 
 ## Quickstart
 
-Prerequisites: a stable Rust toolchain (`rustup`) and [`uv`](https://docs.astral.sh/uv/).
+Prerequisites: a stable Rust toolchain (`rustup`; MSRV 1.87) and
+[`uv`](https://docs.astral.sh/uv/).
 
 ```sh
 make setup   # Python env, build the Rust extension, pre-commit hooks

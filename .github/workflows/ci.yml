@@ -27,8 +27,15 @@ jobs:
       - run: cargo check -p quantis-python
 
   python:
-    name: Python (ruff, mypy, pytest + cross-language)
+    name: Python ${{ matrix.python }} (ruff, mypy, pytest + cross-language)
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"] # declared floor + latest stable
+    env:
+      # Overrides python/.python-version for every uv invocation below, so
+      # sync, maturin and pytest all run on the matrix interpreter.
+      UV_PYTHON: ${{ matrix.python }}
     defaults:
       run:
         working-directory: python

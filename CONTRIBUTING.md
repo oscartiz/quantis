@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-- Stable Rust via [`rustup`](https://rustup.rs/) (edition 2024 workspace)
+- Stable Rust via [`rustup`](https://rustup.rs/) (edition 2024 workspace,
+  MSRV 1.87)
 - [`uv`](https://docs.astral.sh/uv/) for the Python environment (it will
   provision Python 3.11 automatically)
 
@@ -25,9 +26,9 @@ make setup    # syncs python/.venv and installs pre-commit hooks
 ## Quality gates
 
 CI (`.github/workflows/ci.yml`) runs Rust fmt/clippy/tests, Python
-ruff/mypy/pytest, and a deterministic smoke job on every PR and on `main`.
-Enable branch protection on `main` requiring all three jobs, so merges are
-blocked on red.
+ruff/mypy/pytest on 3.11 and 3.13, and a deterministic smoke job on every PR
+and on `main`. Enable branch protection on `main` requiring all CI jobs, so
+merges are blocked on red.
 
 ## Commit conventions
 
