@@ -219,9 +219,11 @@ minutes, mostly to fees, and this README says so on purpose.
 Paper trading (offline replay or live):
 
 ```sh
-quantis trade --config config/engine.toml --replay data/sample/btc-sample.qnts
-quantis trade --config config/engine.toml --duration-secs 3600   # live, paper
-uv run --project python python python/scripts/evaluate_holdout.py # the one-shot holdout
+cargo build --release -p quantis-cli               # → target/release/quantis
+cp config/engine.example.toml config/engine.toml   # gitignored; edit as needed
+./target/release/quantis trade --config config/engine.toml --replay data/sample/btc-sample.qnts
+./target/release/quantis trade --config config/engine.toml --duration-secs 3600  # live data, paper fills
+uv run --project python python python/scripts/evaluate_holdout.py  # the one-shot holdout
 ```
 
 ## Documentation
@@ -250,7 +252,7 @@ python/quantis      research layer: data, features, models, evaluation, dashboar
 config/             schema-validated example configs (TOML engine, YAML research)
 data/sample/        committed, hash-pinned datasets (L2 capture + candle history)
 docs/, docs/adr/    architecture, runbook, scaling, honesty docs + decision records
-PROGRESS.md         live build ledger: phase status, assumptions, next action
+PROGRESS.md         build ledger: phase history, standing decisions, deferred work
 ```
 
 ## Design principles

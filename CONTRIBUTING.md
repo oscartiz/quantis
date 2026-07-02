@@ -20,7 +20,7 @@ make setup    # syncs python/.venv and installs pre-commit hooks
 | `make lint` | clippy (warnings = errors), ruff, mypy strict |
 | `make test` | cargo test + pytest |
 | `make ci` | Exactly what CI runs, locally |
-| `make demo` | Current phase's end-to-end demo |
+| `make demo` | Seeded backtest on the bundled sample + research dashboard, offline |
 
 ## Quality gates
 
@@ -54,5 +54,6 @@ never deleted — their status changes.
 
 ## Process
 
-`PROGRESS.md` is the live build ledger (phase status, assumptions, next
-action). Keep it current in every PR that changes scope or completes a unit.
+`PROGRESS.md` is the build ledger (phase history, verified evidence, standing
+decisions, deferred work). Keep it current in every PR that changes scope or
+completes a unit.

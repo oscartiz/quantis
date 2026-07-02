@@ -10,7 +10,9 @@ This is an operations document: terse, imperative, and exact.
 ## 0. Prerequisites
 
 - Built binary: `cargo build --release -p quantis-cli` → `target/release/quantis`
-- A validated config: `quantis config validate config/engine.toml`
+  (commands below use `quantis` as shorthand for that path).
+- A config: `cp config/engine.example.toml config/engine.toml` (gitignored),
+  edit, then validate: `quantis config validate config/engine.toml`.
 - For live data: outbound network to `wss://api.hyperliquid.xyz/ws` (public,
   keyless).
 
