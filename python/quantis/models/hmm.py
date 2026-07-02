@@ -46,10 +46,12 @@ class HmmParams:
 
     @property
     def n_states(self) -> int:
+        """Number of hidden states ``K``."""
         return int(self.means.shape[0])
 
     @property
     def n_features(self) -> int:
+        """Number of observed feature dimensions ``D``."""
         return int(self.means.shape[1])
 
 

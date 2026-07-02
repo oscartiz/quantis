@@ -55,10 +55,12 @@ class HoldoutManifest:
     holdout_sha256: str
 
     def to_json(self, path: str | Path) -> None:
+        """Write the manifest as pretty-printed JSON."""
         Path(path).write_text(json.dumps(asdict(self), indent=2) + "\n", encoding="utf-8")
 
     @staticmethod
     def from_json(path: str | Path) -> HoldoutManifest:
+        """Load a manifest previously written by :meth:`to_json`."""
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         return HoldoutManifest(**data)
 

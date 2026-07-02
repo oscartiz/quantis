@@ -35,10 +35,12 @@ class TrialRecord:
         return sharpe_ratio(np.asarray(self.returns, dtype=np.float64))
 
     def to_json_line(self) -> str:
+        """Serialize to one JSON line for the append-only log."""
         return json.dumps(asdict(self))
 
     @staticmethod
     def from_json_line(line: str) -> TrialRecord:
+        """Parse one JSON line back into a record."""
         data = json.loads(line)
         return TrialRecord(
             name=data["name"],

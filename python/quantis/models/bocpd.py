@@ -44,6 +44,7 @@ class NormalInverseGammaPrior:
     beta: float = 1.0
 
     def validate(self) -> None:
+        """Reject non-positive hyperparameters (the NIG prior requires them)."""
         if self.kappa <= 0 or self.alpha <= 0 or self.beta <= 0:
             raise ValueError("kappa, alpha, beta must be positive")
 
