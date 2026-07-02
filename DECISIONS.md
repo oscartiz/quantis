@@ -41,6 +41,10 @@ decisions that *cross-cut* the release rather than the architecture live here.
 - **Authors metadata is "Quantis contributors"**, matching the LICENSE
   copyright line, rather than a personal name/email — keeps personal info out
   of the tree.
+- **Declared MSRV is 1.87.** Initially set to 1.85 (the edition-2024 floor);
+  clippy's `incompatible_msrv` lint — caught in the fresh-clone verification —
+  showed the code uses `is_multiple_of` (stable 1.87). 1.87 is the lowest
+  version the workspace actually compiles-and-lints clean on.
 - **Version stays 0.1.0 everywhere** (workspace, both pyprojects), matching the
   CHANGELOG's initial release entry. The CHANGELOG's release-tag link becomes
   real when the maintainer pushes and tags `v0.1.0`.
